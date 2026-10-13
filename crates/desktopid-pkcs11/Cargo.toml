@@ -1,0 +1,22 @@
+[package]
+name = "desktopid-pkcs11"
+version.workspace = true
+license.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+description = "Experimental native PKCS11 provider for DesktopID Linux"
+
+[lib]
+name = "desktopid_pkcs11"
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+cryptoki-sys = "=0.5.0"
+desktopid-client = { path = "../desktopid-client" }
+openssl = "0.10"
+serde_json = "1"
+base64 = "0.22"
+libc = "0.2"
+
+[dev-dependencies]
+tempfile = "3"

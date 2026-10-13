@@ -1,0 +1,22 @@
+[package]
+name = "desktopid-client"
+version.workspace = true
+license.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+description = "Experimental Linux client for the recovered DesktopID RemoteID protocol"
+
+[dependencies]
+anyhow = "1"
+base64 = "0.22"
+clap = { version = "4", features = ["derive"] }
+libc = "0.2"
+openssl = "0.10"
+reqwest = { version = "0.13.5", default-features = false, features = ["blocking", "json", "native-tls"] }
+rpassword = "7"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+zeroize = "1"
+
+[dev-dependencies]
+tempfile = "3"
