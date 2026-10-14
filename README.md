@@ -2,6 +2,8 @@
 
 **Certificados digitais em nuvem no Linux.**
 
+**[Baixar RPM — Fedora 44 x86_64](https://github.com/rodolfoaltenrath/axia-remoteid/releases/download/v0.1.0-alpha.1/axia-remotedid-0.1.0-0.1.alpha1.fc44.x86_64.rpm)** · **[Guia de instalação e testes](docs/TESTING.md)**
+
 O Axia RemotedID conecta certificados em nuvem da Certisign a aplicações Linux compatíveis. Com uma interface gráfica, permite cadastrar o computador, consultar os certificados da conta e autorizar seu uso em autenticação e operações de assinatura digital.
 
 A solução atende profissionais e organizações que precisam acessar serviços com certificado digital em um ambiente Linux. A versão atual está em **fase alpha**, com foco no Fedora e no Firefox nativo.
