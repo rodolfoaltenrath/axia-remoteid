@@ -429,14 +429,8 @@ impl Api {
         push: bool,
         identity: &Identity,
     ) -> Result<Zeroizing<String>> {
-        let mut body = protocol::session_payload(
-            desktop,
-            reference,
-            pin,
-            otp,
-            push,
-            "DesktopID Linux research",
-        );
+        let mut body =
+            protocol::session_payload(desktop, reference, pin, otp, push, "Axia RemotedID");
         let result = self.signed_post(&["api", "signature", "tokensessao"], &body, identity);
         for field in ["pin", "otp"] {
             if let Some(Value::String(value)) = body.get_mut(field) {

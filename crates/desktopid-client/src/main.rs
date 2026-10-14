@@ -23,20 +23,40 @@ use std::{
 use zeroize::Zeroizing;
 
 #[derive(Parser)]
-#[command(version, about = "Cliente experimental DesktopID para Linux")]
+#[command(
+    name = "axia-remotedid",
+    bin_name = "axia-remotedid",
+    version,
+    about = "Axia RemotedID — Certificado em nuvem para Linux",
+    after_help = "Sem comando, abre a janela gráfica de conexão."
+)]
 struct Cli {
     /// Diretório Linux da identidade local (padrão: ~/.config/desktopid-linux).
     #[arg(long, global = true)]
     state_dir: Option<PathBuf>,
     #[command(subcommand)]
-    command: Command,
+    command: Option<Command>,
 }
 
 #[derive(Subcommand)]
 enum Command {
+    /// Abre a janela de login, cadastro deste computador e consulta de certificados.
+    Gui,
+    /// Ativa/desativa a abertura com a sessão; sem opções, mostra a configuração.
+    Autostart {
+        #[arg(long, conflicts_with = "disable")]
+        enable: bool,
+        #[arg(long, conflicts_with = "enable")]
+        disable: bool,
+    },
+    #[command(hide = true)]
+    Startup,
     /// Auxiliar interno PKCS11: pedido público por stdin, autorização gráfica local.
     #[command(hide = true)]
     Pkcs11Sign,
+    /// Auxiliar interno persistente: sessão em memória por dez minutos.
+    #[command(hide = true)]
+    Pkcs11Broker,
     /// Verifica uma assinatura candidata salva, sem rede nem nova assinatura.
     RecoverSignTest {
         #[arg(long)]
@@ -61,7 +81,7 @@ enum Command {
         server: String,
         #[arg(long, default_value = "")]
         access_url: String,
-        #[arg(long, default_value = "DesktopID Fedora Linux")]
+        #[arg(long, default_value = "Axia RemotedID Fedora Linux")]
         desktop_name: String,
         /// Uma repetição diagnóstica explícita, com a mesma chave e histórico preservado.
         #[arg(long, conflicts_with = "retry_domain_fix")]
@@ -233,11 +253,12 @@ fn prompt_email() -> Result<String> {
 }
 
 fn run(cli: Cli) -> Result<()> {
+    let command = cli.command.unwrap_or(Command::Gui);
     if let Command::AuthorizationDiagnostic {
         email,
         server,
         access_url,
-    } = &cli.command
+    } = &command
     {
         let api = Api::new(server)?;
         println!(
@@ -267,7 +288,7 @@ fn run(cli: Cli) -> Result<()> {
         server,
         access_url,
         diagnostics,
-    } = &cli.command
+    } = &command
     {
         let api = Api::new(server)?;
         println!("Teste de login pelo protocolo recuperado, servidor: {server}");
@@ -291,7 +312,7 @@ fn run(cli: Cli) -> Result<()> {
         certificate: cert,
         signature,
         algorithm,
-    } = &cli.command
+    } = &command
     {
         let public = certificate(cert)?.public_key()?;
         verify_digest(
@@ -308,10 +329,39 @@ fn run(cli: Cli) -> Result<()> {
         None => default_state_dir()?,
     };
     let store = Store::new(root)?;
-    if let Command::Pkcs11Sign = cli.command {
+    if let Command::Autostart { enable, disable } = command {
+        let root = desktopid_client::autostart::config_root()?;
+        if enable || disable {
+            desktopid_client::autostart::configure(
+                &root,
+                &desktopid_client::autostart::executable()?,
+                store.path(),
+                enable,
+            )?;
+        }
+        println!(
+            "Inicialização automática do Axia RemotedID: {}",
+            if desktopid_client::autostart::enabled(&root)? {
+                "ativada"
+            } else {
+                "desativada"
+            }
+        );
+        return Ok(());
+    }
+    if let Command::Startup = command {
+        return desktopid_client::gui::run_startup(&store);
+    }
+    if let Command::Gui = command {
+        return desktopid_client::gui::run(&store);
+    }
+    if let Command::Pkcs11Sign = command {
         return desktopid_client::bridge::run(&store);
     }
-    if let Command::RecoverSignTest { run_id } = &cli.command {
+    if let Command::Pkcs11Broker = command {
+        return desktopid_client::bridge::run_broker(&store);
+    }
+    if let Command::RecoverSignTest { run_id } = &command {
         let directory = recover_signing_test(&store, run_id)?;
         println!(
             "Assinatura recuperada e verificada localmente. Nenhuma operação de rede foi realizada."
@@ -319,7 +369,7 @@ fn run(cli: Cli) -> Result<()> {
         println!("Artefatos privados em {}", directory.display());
         return Ok(());
     }
-    if let Command::RegistrationDiagnostic = cli.command {
+    if let Command::RegistrationDiagnostic = command {
         let (config, identity) = store.load()?;
         let public = identity.public_pem()?;
         println!(
@@ -346,7 +396,7 @@ fn run(cli: Cli) -> Result<()> {
         desktop_name,
         retry_registration,
         retry_domain_fix,
-    } = &cli.command
+    } = &command
     {
         let api = Api::new(server)?;
         // Guard before creating an identity or reading credentials: this command
@@ -446,7 +496,7 @@ fn run(cli: Cli) -> Result<()> {
         println!("Nenhuma assinatura foi solicitada.");
         return Ok(());
     }
-    if let Command::Init { server, access_url } = &cli.command {
+    if let Command::Init { server, access_url } = &command {
         let config = store.initialize(server, access_url)?;
         println!(
             "Identidade local criada em {}\nSHA256 da chave pública: {}\nNenhuma instalação foi cadastrada no serviço.",
@@ -460,7 +510,7 @@ fn run(cli: Cli) -> Result<()> {
         certificate_index,
         list,
         push,
-    } = cli.command
+    } = command
     {
         let wallet = store.load_wallet()?;
         ensure!(!wallet.is_empty(), "Carteira vazia; atualize com connect");
@@ -604,12 +654,12 @@ fn run(cli: Cli) -> Result<()> {
         println!("Artefatos privados salvos em {}", directory.display());
         return Ok(());
     }
-    if let Command::Status = cli.command {
+    if let Command::Status = command {
         println!("{}", serde_json::to_string_pretty(&config)?);
         return Ok(());
     }
     let api = Api::new(&config.server)?;
-    match cli.command {
+    match command {
         Command::Register {
             email,
             desktop_name,
@@ -735,7 +785,11 @@ fn run(cli: Cli) -> Result<()> {
         | Command::Connect { .. } => unreachable!(),
         Command::SignTest { .. } => unreachable!(),
         Command::RecoverSignTest { .. } => unreachable!(),
-        Command::Pkcs11Sign => unreachable!(),
+        Command::Pkcs11Sign
+        | Command::Pkcs11Broker
+        | Command::Gui
+        | Command::Startup
+        | Command::Autostart { .. } => unreachable!(),
     }
     Ok(())
 }

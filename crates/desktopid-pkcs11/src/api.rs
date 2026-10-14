@@ -45,14 +45,14 @@ export!(C_Finalize(reserved: *mut c_void) {
     let Ok(mut lock) = STATE.lock() else { return CKR_DEVICE_ERROR; };
     let Some(state) = lock.as_ref() else { return CKR_CRYPTOKI_NOT_INITIALIZED; };
     if state.sessions.values().any(|session| session.busy) { return CKR_FUNCTION_FAILED; }
-    *lock = None; CKR_OK
+    *lock = None; helper::clear_authorization(); CKR_OK
 });
 export!(C_GetInfo(info: *mut CK_INFO) {
     with_state(|_| {
         if info.is_null() { return CKR_ARGUMENTS_BAD; }
         *info = CK_INFO { cryptokiVersion:CK_VERSION { major:2, minor:40 },
-            manufacturerID:padded(b"DesktopID Linux independent"), flags:0,
-            libraryDescription:padded(b"DesktopID Linux PKCS11"), libraryVersion:CK_VERSION { major:0, minor:1 } };
+            manufacturerID:padded(b"Axia RemotedID"), flags:0,
+            libraryDescription:padded(b"Axia RemotedID PKCS11"), libraryVersion:CK_VERSION { major:0, minor:1 } };
         CKR_OK
     })
 });
@@ -69,8 +69,8 @@ export!(C_GetSlotInfo(slot: CK_SLOT_ID, info: *mut CK_SLOT_INFO) {
     with_state(|_| {
         if slot != SLOT { return CKR_SLOT_ID_INVALID; }
         if info.is_null() { return CKR_ARGUMENTS_BAD; }
-        *info = CK_SLOT_INFO { slotDescription:padded(b"DesktopID cloud certificates"),
-            manufacturerID:padded(b"DesktopID Linux independent"), flags:CKF_TOKEN_PRESENT,
+        *info = CK_SLOT_INFO { slotDescription:padded(b"Axia RemotedID cloud certificates"),
+            manufacturerID:padded(b"Axia RemotedID"), flags:CKF_TOKEN_PRESENT,
             hardwareVersion:CK_VERSION { major:0, minor:0 }, firmwareVersion:CK_VERSION { major:0, minor:1 } };
         CKR_OK
     })
@@ -79,9 +79,12 @@ export!(C_GetTokenInfo(slot: CK_SLOT_ID, info: *mut CK_TOKEN_INFO) {
     with_state(|state| {
         if slot != SLOT { return CKR_SLOT_ID_INVALID; }
         if info.is_null() { return CKR_ARGUMENTS_BAD; }
-        *info = CK_TOKEN_INFO { label:padded(b"DesktopID Linux"), manufacturerID:padded(b"DesktopID Linux independent"),
+        *info = CK_TOKEN_INFO { label:padded(b"Axia RemotedID"), manufacturerID:padded(b"Axia RemotedID"),
             model:padded(b"Cloud RSA"), serialNumber:padded(b"LOCAL"),
-            flags:CKF_WRITE_PROTECTED | CKF_LOGIN_REQUIRED | CKF_USER_PIN_INITIALIZED | CKF_TOKEN_INITIALIZED | CKF_PROTECTED_AUTHENTICATION_PATH | CKF_RNG,
+            // No separate token login: references are public and each actual
+            // signature gets its own local authorization. Keep protected-path
+            // support for callers that explicitly invoke C_Login with no PIN.
+            flags:CKF_WRITE_PROTECTED | CKF_USER_PIN_INITIALIZED | CKF_TOKEN_INITIALIZED | CKF_PROTECTED_AUTHENTICATION_PATH | CKF_RNG,
             ulMaxSessionCount:64, ulSessionCount:state.sessions.len() as CK_ULONG,
             ulMaxRwSessionCount:64, ulRwSessionCount:state.sessions.values().filter(|s| s.flags & CKF_RW_SESSION != 0).count() as CK_ULONG,
             ulMaxPinLen:0, ulMinPinLen:0,
@@ -146,7 +149,7 @@ export!(C_Login(handle: CK_SESSION_HANDLE, user: CK_USER_TYPE, _pin: *mut CK_UTF
     with_state(|state| {
         if !state.sessions.contains_key(&handle) { return CKR_SESSION_HANDLE_INVALID; }
         if user != CKU_USER { return CKR_USER_TYPE_INVALID; }
-        // Protected path: login exposes references; only C_Sign prompts credentials.
+        // Compatibility login is local only; C_Sign always prompts credentials.
         if length != 0 { return CKR_PIN_LEN_RANGE; }
         if state.logged_in { return CKR_USER_ALREADY_LOGGED_IN; }
         state.logged_in = true; CKR_OK
@@ -155,8 +158,9 @@ export!(C_Login(handle: CK_SESSION_HANDLE, user: CK_USER_TYPE, _pin: *mut CK_UTF
 export!(C_Logout(handle: CK_SESSION_HANDLE) {
     with_state(|state| {
         if !state.sessions.contains_key(&handle) { return CKR_SESSION_HANDLE_INVALID; }
-        if !state.logged_in { return CKR_USER_NOT_LOGGED_IN; }
         if state.sessions.values().any(|s| s.busy) { return CKR_FUNCTION_FAILED; }
+        helper::clear_authorization();
+        if !state.logged_in { return CKR_USER_NOT_LOGGED_IN; }
         state.logged_in = false;
         for session in state.sessions.values_mut() { session.sign = None; session.search = None; }
         CKR_OK
@@ -173,7 +177,7 @@ export!(C_FindObjectsInit(handle: CK_SESSION_HANDLE, template: *mut CK_ATTRIBUTE
             let data = match input(attr.pValue.cast(), attr.ulValueLen) { Ok(v) => v, Err(rv) => return rv };
             filters.push((attr.type_, data));
         }
-        let matches = state.objects.iter().filter(|(_, object)| !object.private || state.logged_in)
+        let matches = state.objects.iter()
             .filter(|(_, object)| filters.iter().all(|(ty, value)| object.attrs.get(ty).is_some_and(|v| v.as_slice() == *value)))
             .map(|(id, _)| *id).collect();
         state.sessions.get_mut(&handle).unwrap().search = Some(Search { matches, offset:0 }); CKR_OK
@@ -198,12 +202,12 @@ export!(C_FindObjectsFinal(handle: CK_SESSION_HANDLE) {
 export!(C_GetAttributeValue(handle: CK_SESSION_HANDLE, object: CK_OBJECT_HANDLE, template: *mut CK_ATTRIBUTE, count: CK_ULONG) {
     with_state(|state| {
         if !state.sessions.contains_key(&handle) { return CKR_SESSION_HANDLE_INVALID; }
-        let Some(object) = state.objects.get(&object).filter(|o| !o.private || state.logged_in) else { return CKR_OBJECT_HANDLE_INVALID; };
+        let Some(object) = state.objects.get(&object) else { return CKR_OBJECT_HANDLE_INVALID; };
         if count > 128 || (template.is_null() && count != 0) { return CKR_ARGUMENTS_BAD; }
         let attrs = if count == 0 { &mut [][..] } else { slice::from_raw_parts_mut(template, count as usize) };
         let mut rv = CKR_OK;
         for attr in attrs {
-            if object.private && [CKA_VALUE, CKA_PRIVATE_EXPONENT, CKA_PRIME_1, CKA_PRIME_2, CKA_EXPONENT_1, CKA_EXPONENT_2, CKA_COEFFICIENT].contains(&attr.type_) {
+            if object.private_key && [CKA_VALUE, CKA_PRIVATE_EXPONENT, CKA_PRIME_1, CKA_PRIME_2, CKA_EXPONENT_1, CKA_EXPONENT_2, CKA_COEFFICIENT].contains(&attr.type_) {
                 attr.ulValueLen = CK_UNAVAILABLE_INFORMATION; rv = CKR_ATTRIBUTE_SENSITIVE; continue;
             }
             let Some(bytes) = object.attrs.get(&attr.type_) else {
@@ -223,7 +227,7 @@ export!(C_GetAttributeValue(handle: CK_SESSION_HANDLE, object: CK_OBJECT_HANDLE,
 export!(C_GetObjectSize(handle: CK_SESSION_HANDLE, object: CK_OBJECT_HANDLE, size: *mut CK_ULONG) {
     with_state(|state| {
         if !state.sessions.contains_key(&handle) { return CKR_SESSION_HANDLE_INVALID; }
-        let Some(object) = state.objects.get(&object).filter(|o| !o.private || state.logged_in) else { return CKR_OBJECT_HANDLE_INVALID; };
+        let Some(object) = state.objects.get(&object) else { return CKR_OBJECT_HANDLE_INVALID; };
         if size.is_null() { return CKR_ARGUMENTS_BAD; }
         *size = object.attrs.values().map(|v| v.len() as CK_ULONG).sum(); CKR_OK
     })
@@ -260,9 +264,6 @@ unsafe fn operation_init(
         let Some(object) = state.objects.get(&object) else {
             return CKR_KEY_HANDLE_INVALID;
         };
-        if sign && !state.logged_in {
-            return CKR_USER_NOT_LOGGED_IN;
-        }
         if object.attrs.get(&CKA_CLASS)
             != Some(&ulong(if sign {
                 CKO_PRIVATE_KEY
@@ -422,6 +423,9 @@ unsafe fn perform_sign(
             check_signature(&entry, algorithm, &digest, &signature)?;
             Ok(signature)
         });
+    if result.is_err() {
+        helper::clear_authorization();
+    }
     with_state(|state| {
         let Some(session) = state.sessions.get_mut(&handle) else {
             return CKR_SESSION_HANDLE_INVALID;

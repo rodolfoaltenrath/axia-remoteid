@@ -46,17 +46,18 @@ def main(module, client, report):
         helper = temp/'fake-helper'
         counter = temp/'calls.jsonl'
         helper.write_text('''#!/usr/bin/python3
-import base64, json, sys
+import base64, json, os, sys
 from pathlib import Path
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding, utils
 fixture=json.loads(Path(%r).read_text())
-req=json.load(sys.stdin)
-with Path(%r).open('a') as f: f.write(json.dumps({'algorithm':req['algorithm']})+'\\n')
 key=serialization.load_pem_private_key(fixture['private_key_pem'].encode(),None)
-algorithm={'SHA256':hashes.SHA256,'SHA384':hashes.SHA384,'SHA512':hashes.SHA512}[req['algorithm']]()
-signature=key.sign(base64.b64decode(req['digest_base64']),padding.PKCS1v15(),utils.Prehashed(algorithm))
-print(json.dumps({'schema_version':1,'signature_base64':base64.b64encode(signature).decode()}))
+for line in sys.stdin:
+ req=json.loads(line)
+ with Path(%r).open('a') as f: f.write(json.dumps({'algorithm':req['algorithm'],'helper_pid':os.getpid()})+'\\n')
+ algorithm={'SHA256':hashes.SHA256,'SHA384':hashes.SHA384,'SHA512':hashes.SHA512}[req['algorithm']]()
+ signature=key.sign(base64.b64decode(req['digest_base64']),padding.PKCS1v15(),utils.Prehashed(algorithm))
+ print(json.dumps({'schema_version':1,'signature_base64':base64.b64encode(signature).decode()}),flush=True)
 ''' % (str(fixture), str(counter)))
         helper.chmod(0o700)
         synthetic_helper=helper.read_text()
@@ -105,13 +106,13 @@ print(json.dumps({'schema_version':1,'signature_base64':base64.b64encode(signatu
             assert count.value==0
             call('C_FindObjectsFinal',[U],session)
             return result
-        assert len(find(s))==2
-        assert find(s,3)==[]
+        assert len(find(s))==3
+        assert len(find(s,3))==1
         call('C_Login',[U,U,P,U],s,1,None,0)
         assert len(find(s))==3
         assert len(find(other,3))==1
         cert_handle=find(s,1)[0]; pub=find(s,2)[0]; private=find(s,3)[0]
-        checks.append('public-inventory-and-token-wide-protected-path-login')
+        checks.append('public-remote-key-references-and-optional-protected-path-login')
         def attr_value(obj, ty):
             attr=Attribute(ty,None,0)
             call('C_GetAttributeValue',[U,U,P,U],s,obj,C.byref(attr),1)
@@ -179,6 +180,9 @@ print(json.dumps({'schema_version':1,'signature_base64':base64.b64encode(signatu
         call('C_Sign',[U,P,U,P,P],s,buffer(b'raw'),3,output,C.byref(length),expected=0x20)
         assert calls()==before
         checks.append('RSA-PKCS-DigestInfo-not-double-hashed;raw-input-rejected-before-helper')
+        helper_pids={item['helper_pid'] for item in map(json.loads,counter.read_text().splitlines())}
+        assert len(helper_pids)==1
+        checks.append('same-helper-process-survives-multiple-signature-operations')
         # A canceled/invalid response must consume the operation and never retry.
         for script, expected in [
             ('#!/usr/bin/python3\nimport sys\nsys.exit(2)\n',0x50),
@@ -192,10 +196,21 @@ print(json.dumps({'schema_version':1,'signature_base64':base64.b64encode(signatu
         checks.append('cancellation-and-invalid-helper-signature-terminate-without-retry')
         call('C_SignInit',[U,P,U],s,C.byref(Mechanism(0xd,None,0)),private,expected=0x70)
         call('C_Logout',[U],s)
-        assert find(other,3)==[]
+        assert len(find(other,3))==1
+        helper.write_text(synthetic_helper)
+        before=calls()
+        call('C_SignInit',[U,P,U],other,C.byref(Mechanism(0x40,None,0)),private)
+        length.value=256
+        call('C_Sign',[U,P,U,P,P],other,message,len(document),output,C.byref(length))
+        assert calls()==before+1
+        assert output.raw==base64.b64decode(data['signatures']['SHA256'])
+        current_pid=json.loads(counter.read_text().splitlines()[-1])['helper_pid']
+        assert current_pid not in helper_pids
+        checks.append('signature-without-token-login-still-requires-one-effective-helper-call')
         call('C_CloseSession',[U],s)
         call('C_CloseSession',[U],other)
         call('C_Finalize',[P],None)
+        assert not Path(f'/proc/{current_pid}').exists()
         checks.append('unsupported-PSS-and-session-cleanup')
         for args in [['--show-info'],['--list-slots'],['--list-mechanisms'],['--list-objects','--login']]:
             tool=subprocess.run(['pkcs11-tool','--module',str(module),*args],capture_output=True,text=True,timeout=30)

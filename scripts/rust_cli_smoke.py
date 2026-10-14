@@ -60,6 +60,42 @@ def smoke(binary):
                      '--algorithm', 'sha1'], successful=False)
         checks.append('unsupported-sha1-rejected-before-operation')
         missing = directory/'login-must-not-create-state'
+        headless_environment = {name: value for name, value in os.environ.items()
+                                if name not in ('DISPLAY', 'WAYLAND_DISPLAY')}
+        for command in ([], ['gui']):
+            result = subprocess.run([str(binary), '--state-dir', str(missing), *command],
+                                    env=headless_environment, capture_output=True,
+                                    text=True, timeout=30)
+            assert result.returncode != 0
+            assert 'Sessão gráfica indisponível' in result.stderr
+            assert not missing.exists()
+        checks.append('gui-default-and-explicit-command-reject-headless-session-without-state')
+        preference_root = directory/'preferences'
+        preference_environment = dict(headless_environment, HOME=str(directory),
+                                      XDG_CONFIG_HOME=str(preference_root))
+        def preference_command(*command):
+            result = subprocess.run([str(binary), '--state-dir', str(missing), *command],
+                                    env=preference_environment, capture_output=True,
+                                    text=True, timeout=30)
+            assert result.returncode == 0, result.stderr
+            return result
+        preference_command('autostart', '--enable')
+        entry = preference_root/'autostart/axia-remotedid.desktop'
+        assert 'Name=Axia RemotedID' in entry.read_text()
+        assert 'Hidden=false' in entry.read_text()
+        preference_command('autostart', '--disable')
+        assert 'Hidden=true' in entry.read_text()
+        assert 'desativada' in preference_command('autostart').stdout
+        preference_command('startup')
+        assert not missing.exists()
+        assert (state/'identity.pem').read_bytes() == before
+        checks.append('autostart-enable-disable-and-disabled-startup-without-account-or-network')
+        broker = subprocess.run([str(binary), '--state-dir', str(missing), 'pkcs11-broker'],
+                                input='', env=headless_environment, capture_output=True,
+                                text=True, timeout=10)
+        assert broker.returncode == 0 and not broker.stdout
+        assert not missing.exists()
+        checks.append('signing-broker-closes-on-parent-pipe-eof-without-state-or-network')
         result = run(binary, ['--state-dir', missing, 'login-check', '--server', 'http://example.invalid'], successful=False)
         assert 'HTTPS' in result.stderr
         assert not missing.exists()

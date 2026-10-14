@@ -28,7 +28,7 @@ pub static NEXT_SESSION: AtomicU64 = AtomicU64::new(1);
 pub struct Object {
     pub attrs: BTreeMap<CK_ATTRIBUTE_TYPE, Vec<u8>>,
     pub certificate: usize,
-    pub private: bool,
+    pub private_key: bool,
 }
 pub struct Operation {
     pub mechanism: CK_MECHANISM_TYPE,
@@ -110,7 +110,7 @@ impl State {
                 .entries_by_nid(Nid::COMMONNAME)
                 .next()
                 .and_then(|e| e.data().to_string().ok())
-                .unwrap_or_else(|| format!("DesktopID certificado {}", index + 1));
+                .unwrap_or_else(|| format!("Axia RemotedID certificado {}", index + 1));
             let base = BTreeMap::from([
                 (CKA_TOKEN, boolean(true)),
                 (CKA_MODIFIABLE, boolean(false)),
@@ -150,7 +150,7 @@ impl State {
                 Object {
                     attrs,
                     certificate: index,
-                    private: false,
+                    private_key: false,
                 },
             );
             let public = cert.public_key().map_err(|_| CKR_DEVICE_ERROR)?;
@@ -201,12 +201,14 @@ impl State {
                 Object {
                     attrs: pub_attrs,
                     certificate: index,
-                    private: false,
+                    private_key: false,
                 },
             );
             attrs.extend([
                 (CKA_CLASS, ulong(CKO_PRIVATE_KEY)),
-                (CKA_PRIVATE, boolean(true)),
+                // This is a public reference to a remote key, not key material.
+                // Authorization belongs to each effective C_Sign operation.
+                (CKA_PRIVATE, boolean(false)),
                 (CKA_SIGN, boolean(true)),
                 (CKA_VERIFY, boolean(false)),
                 (CKA_SENSITIVE, boolean(true)),
@@ -220,7 +222,7 @@ impl State {
                 Object {
                     attrs,
                     certificate: index,
-                    private: true,
+                    private_key: true,
                 },
             );
         }

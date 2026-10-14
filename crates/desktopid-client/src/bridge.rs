@@ -1,7 +1,8 @@
-//! One-shot external helper: credentials collected locally, never through IPC.
+//! Local signing helper; reusable capabilities remain in helper memory only.
 use crate::{
     client::Api,
     protocol::{Algorithm, CertificateReference, reference_from_key_name, verify_digest},
+    session_cache::{Clock, SessionCache},
     signing::validate_certificate,
     storage::Store,
 };
@@ -9,7 +10,8 @@ use anyhow::{Context, Result, ensure};
 use base64::{Engine, engine::general_purpose::STANDARD};
 use serde::Deserialize;
 use std::{
-    io::{self, Read},
+    io::{self, Read, Write},
+    os::fd::AsRawFd,
     process::{Command, Stdio},
 };
 use zeroize::Zeroizing;
@@ -25,13 +27,13 @@ impl std::error::Error for Cancelled {}
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
-struct Request {
+pub(crate) struct Request {
     schema_version: u32,
     certificate_sha256: String,
     algorithm: String,
     digest_base64: String,
 }
-fn dialog(label: &str) -> Result<(Zeroizing<String>, Zeroizing<String>)> {
+fn dialog(label: &str, cached: bool) -> Result<(Zeroizing<String>, Zeroizing<String>)> {
     ensure!(
         std::env::var_os("WAYLAND_DISPLAY").is_some() || std::env::var_os("DISPLAY").is_some(),
         "Sessão gráfica indisponível; nenhuma autorização ou assinatura solicitada"
@@ -40,11 +42,20 @@ fn dialog(label: &str) -> Result<(Zeroizing<String>, Zeroizing<String>)> {
         .replace('&', "&amp;")
         .replace('<', "&lt;")
         .replace('>', "&gt;");
+    let authorization = if cached {
+        "Esta autorização permitirá novas assinaturas com este certificado neste aplicativo por até 10 minutos.\nFechar o aplicativo encerra a autorização. Senha e código não serão guardados."
+    } else {
+        "Autorize somente se você iniciou essa operação."
+    };
     let text = format!(
-        "Um aplicativo deste computador solicitou uma assinatura digital.\nCertificado: {label}\nAutorize somente se você iniciou essa operação."
+        "Um aplicativo deste computador solicitou uma assinatura digital.\nCertificado: {label}\n{authorization}"
     );
     let result = Command::new("/usr/bin/zenity")
-        .args(["--forms", "--title=Autorizar certificado digital", "--text"])
+        .args([
+            "--forms",
+            "--title=Axia RemotedID — Autorizar certificado",
+            "--text",
+        ])
         .arg(text)
         .arg("--add-password=Senha do aplicativo Certisign")
         .arg("--add-password=Código do celular (OTP)")
@@ -69,11 +80,14 @@ fn dialog(label: &str) -> Result<(Zeroizing<String>, Zeroizing<String>)> {
     Ok((password, otp))
 }
 
-pub fn run(store: &Store) -> Result<()> {
-    let mut input = Vec::new();
-    io::stdin().take(8193).read_to_end(&mut input)?;
-    ensure!(input.len() <= 8192, "Pedido local excede o limite");
-    let request: Request = serde_json::from_slice(&input).context("Pedido local inválido")?;
+pub(crate) fn sign_request(
+    api: &Api,
+    store: &Store,
+    request: Request,
+    cache: &mut SessionCache,
+    cached: bool,
+    mut authorize: impl FnMut(&str) -> Result<(Zeroizing<String>, Zeroizing<String>)>,
+) -> Result<Vec<u8>> {
     ensure!(
         request.schema_version == 1,
         "Versão de pedido local inválida"
@@ -138,19 +152,180 @@ pub fn run(store: &Store) -> Result<()> {
         .next()
         .and_then(|e| e.data().to_string().ok())
         .unwrap_or_else(|| "Certificado selecionado".into());
-    let (password, otp) = dialog(&label)?;
-    let api = Api::new(&config.server)?;
     let reference = CertificateReference {
         serial: &serial,
         issue: &issue,
     };
-    let token = api.open_session(desktop, &reference, &password, &otp, false, &identity)?;
-    let signature = api.sign_digest(desktop, &reference, &token, algorithm, &digest, &identity)?;
-    let public = entry.certificate.public_key()?;
-    verify_digest(&public, algorithm, &digest, &signature)?;
+    let key = (
+        config.server.clone(),
+        desktop.to_owned(),
+        config.public_key_sha256.clone(),
+        request.certificate_sha256,
+        entry.key_name.clone(),
+    );
+    cache.retain_context(&key);
+    let previous = if cached {
+        cache.get(&key, Clock::now())
+    } else {
+        None
+    };
+    let new_session = previous.is_none();
+    let (token, created) = match previous {
+        Some(token) => (token, None),
+        None => {
+            let (password, otp) = authorize(&label)?;
+            let token = api.open_session(desktop, &reference, &password, &otp, false, &identity)?;
+            ensure!(token.len() <= 16384, "Token de sessão excede o limite");
+            (token, Some(Clock::now()))
+        }
+    };
+    let result = api
+        .sign_digest(desktop, &reference, &token, algorithm, &digest, &identity)
+        .and_then(|signature| {
+            let public = entry.certificate.public_key()?;
+            verify_digest(&public, algorithm, &digest, &signature)?;
+            Ok(signature)
+        });
+    match result {
+        Ok(signature) => {
+            if cached && new_session {
+                cache.put(key, token, created.context("Tempo da autorização ausente")?);
+            }
+            Ok(signature)
+        }
+        Err(error) => {
+            cache.remove(&key);
+            Err(error.context(
+                "Assinatura não confirmada; autorização encerrada, sem repetição automática",
+            ))
+        }
+    }
+}
+
+pub fn run(store: &Store) -> Result<()> {
+    let mut input = Vec::new();
+    io::stdin().take(8193).read_to_end(&mut input)?;
+    ensure!(input.len() <= 8192, "Pedido local excede o limite");
+    let request = serde_json::from_slice(&input).context("Pedido local inválido")?;
+    let api = Api::new(&store.load()?.0.server)?;
+    let signature = sign_request(
+        &api,
+        store,
+        request,
+        &mut SessionCache::default(),
+        false,
+        |label| dialog(label, false),
+    )?;
     println!(
         "{}",
         serde_json::json!({"schema_version":1,"signature_base64":STANDARD.encode(signature)})
     );
     Ok(())
+}
+
+enum Input {
+    Request(Vec<u8>),
+    Expired,
+    Eof,
+}
+
+fn read_request(idle: std::time::Duration) -> Result<Input> {
+    let input = io::stdin();
+    let deadline = std::time::Instant::now() + idle;
+    let wall_started = std::time::SystemTime::now();
+    let mut bytes = Vec::new();
+    loop {
+        let remaining = deadline.saturating_duration_since(std::time::Instant::now());
+        if remaining.is_zero()
+            || wall_started
+                .elapsed()
+                .map(|elapsed| elapsed >= idle)
+                .unwrap_or(true)
+        {
+            return Ok(Input::Expired);
+        }
+        let mut descriptor = libc::pollfd {
+            fd: input.as_raw_fd(),
+            events: libc::POLLIN,
+            revents: 0,
+        };
+        // SAFETY: one valid descriptor and bounded millisecond timeout.
+        let status = unsafe {
+            libc::poll(
+                &mut descriptor,
+                1,
+                remaining.as_millis().clamp(1, 1000) as i32,
+            )
+        };
+        if status < 0 {
+            let error = io::Error::last_os_error();
+            if error.kind() == io::ErrorKind::Interrupted {
+                continue;
+            }
+            return Err(error.into());
+        }
+        if status == 0 {
+            continue;
+        }
+        let mut byte = [0u8];
+        // SAFETY: byte is a writable one-byte buffer; EOF closes the broker.
+        let read = unsafe { libc::read(input.as_raw_fd(), byte.as_mut_ptr().cast(), 1) };
+        if read == 0 {
+            return Ok(Input::Eof);
+        }
+        if read < 0 {
+            let error = io::Error::last_os_error();
+            if error.kind() == io::ErrorKind::Interrupted {
+                continue;
+            }
+            return Err(error.into());
+        }
+        if byte[0] == b'\n' {
+            return Ok(Input::Request(bytes));
+        }
+        ensure!(bytes.len() < 8192, "Pedido local excede o limite");
+        bytes.push(byte[0]);
+    }
+}
+
+/// One pipe-connected helper per application. Only public requests/signatures
+/// cross IPC. Closing its parent pipes or idle expiry destroys all tokens.
+pub fn run_broker(store: &Store) -> Result<()> {
+    let mut cache = SessionCache::default();
+    let mut first = true;
+    loop {
+        let idle = match cache.next_expiration(Clock::now()) {
+            Some(remaining) => remaining,
+            None if first => std::time::Duration::from_secs(400),
+            None => return Ok(()),
+        };
+        let input = match read_request(idle)? {
+            Input::Request(input) => input,
+            Input::Expired if first => return Ok(()),
+            Input::Expired => continue,
+            Input::Eof => return Ok(()),
+        };
+        first = false;
+        let result = (|| {
+            let request = serde_json::from_slice(&input).context("Pedido local inválido")?;
+            let api = Api::new(&store.load()?.0.server)?;
+            sign_request(&api, store, request, &mut cache, true, |label| {
+                dialog(label, true)
+            })
+        })();
+        let failed = result.is_err();
+        let response = match result {
+            Ok(signature) => {
+                serde_json::json!({"schema_version":1,"signature_base64":STANDARD.encode(signature)})
+            }
+            Err(error) => {
+                serde_json::json!({"schema_version":1,"error":if error.downcast_ref::<Cancelled>().is_some() { "cancelled" } else { "failed" }})
+            }
+        };
+        writeln!(io::stdout(), "{response}")?;
+        io::stdout().flush()?;
+        if failed {
+            return Ok(());
+        }
+    }
 }

@@ -9,6 +9,7 @@ __pycache__/
 .env
 .env.*
 **/.config/desktopid-linux/
+**/.config/axia-remotedid/
 **/desktopid-linux-state/
 identity.pem
 public.pem

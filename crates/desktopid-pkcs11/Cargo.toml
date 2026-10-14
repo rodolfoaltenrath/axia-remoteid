@@ -4,7 +4,7 @@ version.workspace = true
 license.workspace = true
 edition.workspace = true
 rust-version.workspace = true
-description = "Experimental native PKCS11 provider for DesktopID Linux"
+description = "Experimental native PKCS11 provider for Axia RemotedID"
 
 [lib]
 name = "desktopid_pkcs11"

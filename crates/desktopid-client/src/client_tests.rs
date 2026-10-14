@@ -104,6 +104,273 @@ fn response(body: Value) -> Response {
     }
 }
 
+fn gui_credentials() -> crate::gui::Action {
+    crate::gui::Action::Register(crate::gui::Credentials {
+        email: "lab@example.invalid".into(),
+        password: zeroize::Zeroizing::new("lab-password".into()),
+        desktop_name: "Test Fedora GUI".into(),
+    })
+}
+
+fn signing_store(directory: &std::path::Path) -> (crate::storage::Store, Value) {
+    let fixture: Value =
+        serde_json::from_str(include_str!("../tests/fixtures/python-vectors.json")).unwrap();
+    let store = crate::storage::Store::new(directory.join("identity")).unwrap();
+    store.initialize("https://example.invalid", "").unwrap();
+    let (mut config, _) = store.load().unwrap();
+    config.desktop_code = Some("lab-desktop".into());
+    std::fs::write(
+        store.path().join("config.json"),
+        serde_json::to_vec(&config).unwrap(),
+    )
+    .unwrap();
+    store
+        .save_wallet(&[WalletCertificate {
+            key_name: "SERIAL;ISSUER".into(),
+            certificate: X509::from_pem(fixture["certificate_pem"].as_str().unwrap().as_bytes())
+                .unwrap(),
+        }])
+        .unwrap();
+    (store, fixture)
+}
+
+fn cached_signing_request(fixture: &Value) -> crate::bridge::Request {
+    let certificate =
+        X509::from_pem(fixture["certificate_pem"].as_str().unwrap().as_bytes()).unwrap();
+    let fingerprint = certificate.digest(MessageDigest::sha256()).unwrap();
+    let fingerprint: String = fingerprint
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect();
+    let document = STANDARD
+        .decode(fixture["document_base64"].as_str().unwrap())
+        .unwrap();
+    serde_json::from_value(json!({"schema_version":1, "certificate_sha256":fingerprint,
+        "algorithm":"SHA256", "digest_base64":STANDARD.encode(hash(MessageDigest::sha256(), &document).unwrap())})).unwrap()
+}
+
+#[test]
+fn cached_signing_reuses_only_session_token_and_discards_it_after_failure_without_retry() {
+    let temporary = tempfile::tempdir().unwrap();
+    let (store, fixture) = signing_store(temporary.path());
+    let signature = || {
+        response(
+            json!({"status":true,"idArray":[{"id":"lab","status":true,"signatureBase64":fixture["signatures"]["SHA256"]}]}),
+        )
+    };
+    let (api, server) = mock(vec![
+        response(json!({"status":true,"token":"lab-capability"})),
+        signature(),
+        signature(),
+        Response {
+            status: 403,
+            body: json!({"message":"lab-secret"}),
+            extra_header: None,
+        },
+        response(json!({"status":true,"token":"new-lab-capability"})),
+        signature(),
+    ]);
+    let mut cache = crate::session_cache::SessionCache::default();
+    let mut prompts = 0;
+    for success in [true, true, false, true] {
+        let result = crate::bridge::sign_request(
+            &api,
+            &store,
+            cached_signing_request(&fixture),
+            &mut cache,
+            true,
+            |_| {
+                prompts += 1;
+                Ok((
+                    zeroize::Zeroizing::new("lab-password".into()),
+                    zeroize::Zeroizing::new("001234".into()),
+                ))
+            },
+        );
+        assert_eq!(result.is_ok(), success);
+        if let Err(error) = result {
+            assert!(!format!("{error:#}").contains("lab-secret"));
+        }
+    }
+    assert_eq!(prompts, 2);
+    let requests = server.join().unwrap();
+    assert_eq!(requests.len(), 6);
+    assert_eq!(
+        requests
+            .iter()
+            .filter(|request| request.path == "/api/signature/tokensessao")
+            .count(),
+        2
+    );
+    assert_eq!(requests[1].body["sessionToken"], "lab-capability");
+    assert_eq!(requests[2].body["sessionToken"], "lab-capability");
+    assert_eq!(requests[3].body["sessionToken"], "lab-capability");
+    assert_eq!(requests[5].body["sessionToken"], "new-lab-capability");
+    for request in requests
+        .iter()
+        .filter(|request| request.path.ends_with("requestHashSessionSignature"))
+    {
+        assert!(request.body.get("pin").is_none());
+        assert!(request.body.get("otp").is_none());
+    }
+}
+
+#[test]
+fn cancelling_new_cached_authorization_sends_no_cloud_request() {
+    let temporary = tempfile::tempdir().unwrap();
+    let (store, fixture) = signing_store(temporary.path());
+    let (api, server) = mock(Vec::new());
+    let result = crate::bridge::sign_request(
+        &api,
+        &store,
+        cached_signing_request(&fixture),
+        &mut crate::session_cache::SessionCache::default(),
+        true,
+        |_| Err(crate::bridge::Cancelled.into()),
+    );
+    assert!(
+        result
+            .unwrap_err()
+            .downcast_ref::<crate::bridge::Cancelled>()
+            .is_some()
+    );
+    assert!(server.join().unwrap().is_empty());
+}
+
+#[test]
+fn gui_cancel_creates_no_identity_and_sends_no_request() {
+    let (api, server) = mock(Vec::new());
+    let temporary = tempfile::tempdir().unwrap();
+    let store = crate::storage::Store::new(temporary.path().join("identity")).unwrap();
+    let result = crate::gui::connect_with(
+        &api,
+        &store,
+        |registered| {
+            assert!(!registered);
+            Ok(crate::gui::Action::Cancel)
+        },
+        |_| panic!("Cancellation must not start a network operation"),
+    )
+    .unwrap();
+    assert!(result.is_none());
+    assert!(!store.path().exists());
+    assert!(server.join().unwrap().is_empty());
+}
+
+#[test]
+fn gui_registers_once_and_refreshes_cached_wallet_without_another_login() {
+    let fixture: Value =
+        serde_json::from_str(include_str!("../tests/fixtures/python-vectors.json")).unwrap();
+    let certificate =
+        X509::from_pem(fixture["certificate_pem"].as_str().unwrap().as_bytes()).unwrap();
+    let (api, server) = mock(vec![
+        response(json!({"id":"lab-user","organizacaoId":"lab-org","token":"lab-token"})),
+        response(json!({"codigoDesktop":"lab-desktop"})),
+        response(
+            json!({"certificados":[{"keyName":"SERIAL;ISSUER", "base64":STANDARD.encode(certificate.to_der().unwrap())}]}),
+        ),
+        Response {
+            status: 304,
+            body: Value::Null,
+            extra_header: None,
+        },
+    ]);
+    let temporary = tempfile::tempdir().unwrap();
+    let store = crate::storage::Store::new(temporary.path().join("identity")).unwrap();
+    let first = crate::gui::connect_with(
+        &api,
+        &store,
+        |registered| {
+            assert!(!registered);
+            Ok(gui_credentials())
+        },
+        |_| Ok(()),
+    )
+    .unwrap()
+    .unwrap();
+    assert!(first.registered_now && first.wallet_updated);
+    assert_eq!(first.certificate_count, 1);
+    assert_eq!(first.compatible_count, 1);
+    let fingerprint = store.load().unwrap().1.fingerprint().unwrap();
+    let second = crate::gui::connect_with(
+        &api,
+        &store,
+        |registered| {
+            assert!(registered);
+            Ok(crate::gui::Action::Refresh)
+        },
+        |_| Ok(()),
+    )
+    .unwrap()
+    .unwrap();
+    assert!(!second.registered_now && !second.wallet_updated);
+    assert_eq!(second.certificate_count, 1);
+    assert_eq!(store.load().unwrap().1.fingerprint().unwrap(), fingerprint);
+    let requests = server.join().unwrap();
+    assert_eq!(requests.len(), 4);
+    assert_eq!(requests[1].body["nomeDesktop"], "Test Fedora GUI");
+    assert_eq!(requests[1].body["dominioRede"], "Local");
+    assert_eq!(
+        requests[2].path,
+        "/api/manager/desktopid/lab-desktop/carteira"
+    );
+    assert_eq!(requests[3].path, requests[2].path);
+    assert!(store.path().join("registration.json").exists());
+}
+
+#[test]
+fn gui_failed_login_creates_no_identity_or_registration_attempt() {
+    for status in [401, 500] {
+        let (api, server) = mock(vec![Response {
+            status,
+            body: json!({"message":"lab-password"}),
+            extra_header: None,
+        }]);
+        let temporary = tempfile::tempdir().unwrap();
+        let store = crate::storage::Store::new(temporary.path().join("identity")).unwrap();
+        let error = crate::gui::connect_with(&api, &store, |_| Ok(gui_credentials()), |_| Ok(()))
+            .err()
+            .unwrap();
+        assert!(!format!("{error:#}").contains("lab-password"));
+        assert!(
+            error
+                .to_string()
+                .contains("cadastro deste computador não foi iniciado")
+        );
+        assert!(format!("{error:#}").contains(&status.to_string()));
+        assert!(!store.path().exists());
+        assert_eq!(server.join().unwrap().len(), 1);
+    }
+}
+
+#[test]
+fn gui_failed_registration_preserves_identity_and_blocks_a_second_dialog() {
+    let (api, server) = mock(vec![
+        response(json!({"id":"lab-user","organizacaoId":"lab-org","token":"lab-token"})),
+        Response {
+            status: 503,
+            body: json!({"message":"lab-password"}),
+            extra_header: None,
+        },
+    ]);
+    let temporary = tempfile::tempdir().unwrap();
+    let store = crate::storage::Store::new(temporary.path().join("identity")).unwrap();
+    assert!(crate::gui::connect_with(&api, &store, |_| Ok(gui_credentials()), |_| Ok(())).is_err());
+    let fingerprint = store.load().unwrap().1.fingerprint().unwrap();
+    assert!(store.path().join("registration-attempt.json").exists());
+    assert!(
+        crate::gui::connect_with(
+            &api,
+            &store,
+            |_| panic!("An ambiguous registration must be blocked before asking for credentials"),
+            |_| Ok(()),
+        )
+        .is_err()
+    );
+    assert_eq!(store.load().unwrap().1.fingerprint().unwrap(), fingerprint);
+    assert_eq!(server.join().unwrap().len(), 2);
+}
+
 #[test]
 fn guided_signing_derives_reference_and_rejects_signature_for_changed_document() {
     use crate::signing::{SigningAuthorization, sign_and_verify};
