@@ -111,6 +111,9 @@ fn argument(value: &str) -> Result<String> {
 }
 
 pub fn executable() -> Result<PathBuf> {
+    if let Some(system) = crate::installation::system_helper() {
+        return Ok(system.to_owned());
+    }
     let home = PathBuf::from(std::env::var_os("HOME").context("HOME Linux não definido")?);
     let installed = home.join(".local/libexec/desktopid-linux/desktopid-client");
     if installed.try_exists()? {

@@ -1,0 +1,5 @@
+#!/bin/sh
+set -eu
+script_path=$(readlink -f -- "$0")
+install_prefix=$(dirname -- "$(dirname -- "$script_path")")
+exec /usr/bin/python3 "$install_prefix/share/axia-remotedid/desktop_app.py" "$@"

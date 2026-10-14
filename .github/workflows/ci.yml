@@ -9,7 +9,7 @@ jobs:
     timeout-minutes: 30
     steps:
       - name: Install build and test dependencies
-        run: dnf install -y git cargo rust gcc openssl-devel clippy rustfmt python3 python3-cryptography opensc nss
+        run: dnf install -y git cargo rust gcc openssl-devel clippy rustfmt python3 python3-cryptography opensc nss rpm-build desktop-file-utils util-linux
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
@@ -23,3 +23,16 @@ jobs:
         run: sh scripts/test_pkcs11_wsl.sh
       - name: Firefox NSS registration tests
         run: python3 scripts/firefox_nss_smoke.py --module "$HOME/.cache/desktopid-rust-target/debug/libdesktopid_pkcs11.so" --client "$HOME/.cache/desktopid-rust-target/debug/desktopid-client"
+      - name: Build Fedora distribution RPM
+        run: |
+          sh scripts/build_fedora.sh
+          python3 scripts/package_rpm.py --target dist/fedora
+      - name: Install, reinstall and remove the RPM in the Fedora container
+        run: |
+          dnf install -y dist/axia-remotedid-*.x86_64.rpm
+          useradd --create-home rpm-test
+          runuser -u rpm-test -- python3 "$PWD/scripts/rpm_runtime_smoke.py"
+          dnf reinstall -y dist/axia-remotedid-*.x86_64.rpm
+          runuser -u rpm-test -- /usr/bin/axia-remotedid --version
+          dnf remove -y axia-remotedid
+          python3 scripts/rpm_runtime_smoke.py --check-preserved /home/rpm-test

@@ -2,6 +2,8 @@
 
 Guia técnico para preparar a versão alpha, instalar a integração com o Firefox e contribuir com o projeto. Para uma apresentação do produto, consulte o [README](../README.md). Os resultados de validação e o histórico técnico estão na [continuidade do projeto](../CONTINUIDADE_IA_FEDORA.md).
 
+Para instalar o pacote pré-compilado sem ferramentas de desenvolvimento, siga o [guia de testes da alpha](TESTING.md). O pacote inclui `install.sh`, instruções para usuários e um arquivo SHA-256 separado. A build de distribuição atual destina-se ao Fedora 44 x86_64.
+
 ## Compilar e testar no Fedora
 
 Use Rust/Cargo compatível com o workspace (mínimo declarado 1.88; validação realizada com 1.98.1), Python 3 e OpenSSL de desenvolvimento. Os comandos abaixo usam os pacotes do Fedora:
@@ -74,6 +76,26 @@ python3 scripts/firefox_nss_smoke.py --module dist/fedora/libdesktopid_pkcs11.so
 ```
 
 O teste confirma carregamento pelo NSS, enumeração de certificado de laboratório, persistência, reinstalação sem duplicação, backup privado e preservação de um módulo conflitante. O usuário confirmou acesso real ao GERID/INSS pelo Firefox no Fedora nativo; outros serviços continuam pendentes.
+
+## Gerar o RPM de distribuição
+
+Compile a versão release e gere o pacote no Fedora 44 x86_64:
+
+```bash
+sudo dnf install rpm-build desktop-file-utils openssl-libs
+sh scripts/build_fedora.sh
+python3 scripts/package_rpm.py --target dist/fedora
+```
+
+Também é possível empacotar com Podman, sem instalar as ferramentas RPM no host:
+
+```bash
+python3 scripts/package_rpm.py --target dist/fedora --container
+```
+
+O RPM e seu checksum ficam em `dist/`, ignorados pelo Git. O pacote declara as dependências de execução, instala o comando em `/usr/bin/axia-remotedid`, o auxiliar em `/usr/libexec/axia-remotedid` e o módulo em `/usr/lib64/axia-remotedid`. A validação dos caminhos do sistema exige propriedade root, permissões protegidas e ausência de links simbólicos nos componentes.
+
+A integração NSS ocorre na sessão do usuário, pela interface gráfica, com o Firefox fechado. Nenhum script de instalação ou remoção do RPM modifica perfis ou estados de contas. A migração do módulo legado para o módulo do RPM exige ação do usuário, mantém backup e tenta restaurar o módulo anterior se a troca falhar. O atalho do sistema usa um ID próprio; a primeira abertura oculta somente os atalhos legados reconhecidos do projeto e atualiza seu próprio alias, preservando arquivos de terceiros e os dados da identidade.
 
 ## Usar a conta e testar uma assinatura
 

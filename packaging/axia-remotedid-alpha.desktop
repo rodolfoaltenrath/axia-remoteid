@@ -1,0 +1,15 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=Axia RemotedID Alpha
+Comment=Certificados digitais em nuvem no Linux
+Exec=/usr/bin/axia-remotedid gui
+TryExec=/usr/bin/axia-remotedid
+Icon=dialog-password
+Terminal=false
+Categories=Utility;Security;System;
+Actions=Firefox;
+
+[Desktop Action Firefox]
+Name=Integrar Firefox
+Exec=/usr/bin/axia-remotedid setup-firefox

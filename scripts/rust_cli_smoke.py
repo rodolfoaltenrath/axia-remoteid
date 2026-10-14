@@ -9,6 +9,7 @@ import json
 import os
 from pathlib import Path
 import platform
+import shutil
 import subprocess
 import tempfile
 from cryptography import x509
@@ -173,8 +174,10 @@ if __name__ == '__main__':
     parser.add_argument('--report', type=Path, required=True)
     args = parser.parse_args()
     report = smoke(args.binary)
-    report['rust_version'] = subprocess.check_output(['rustc', '--version'], text=True).strip()
-    report['cargo_version'] = subprocess.check_output(['cargo', '--version'], text=True).strip()
+    for name in ['rustc', 'cargo']:
+        key = 'rust_version' if name == 'rustc' else 'cargo_version'
+        report[key] = (subprocess.check_output([name, '--version'], text=True).strip()
+                       if shutil.which(name) else None)
     if os.environ.get('DESKTOPID_RUST_VALIDATION') == 'passed':
         report.update(cargo_fmt_check_passed=True, cargo_clippy_passed=True, cargo_test_passed=True,
                       cargo_build_passed=True,

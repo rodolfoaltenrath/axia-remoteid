@@ -21,6 +21,21 @@ import uuid
 MODULE_NAME = 'DesktopID Linux Alpha'
 TOKEN_NAME = 'Axia RemotedID'
 DATABASE_FILES = ('pkcs11.txt', 'cert9.db', 'key4.db')
+SYSTEM_MODULE = Path('/usr/lib64/axia-remotedid/libdesktopid_pkcs11.so')
+
+
+def protected_system_module(path):
+    if path != SYSTEM_MODULE:
+        return False
+    for candidate in [path, *path.parents]:
+        try:
+            metadata = candidate.lstat()
+        except OSError:
+            return False
+        expected = stat.S_ISREG if candidate == path else stat.S_ISDIR
+        if not expected(metadata.st_mode) or metadata.st_uid != 0 or metadata.st_mode & 0o022:
+            return False
+    return True
 
 
 def owned_file(path):
@@ -30,7 +45,7 @@ def owned_file(path):
     return metadata
 
 
-def default_profile(home):
+def native_profiles(home):
     home = home.resolve(strict=True)
     config_root = Path(os.environ.get('XDG_CONFIG_HOME', str(home/'.config')))
     roots = [config_root/'mozilla/firefox', home/'.mozilla/firefox']
@@ -54,6 +69,11 @@ def default_profile(home):
                     paths.append(root/path if value.get('IsRelative', '1') == '1' else path)
         candidates.extend(path.resolve(strict=True) for path in paths if path.is_dir())
     candidates = list(dict.fromkeys(candidates))
+    return candidates
+
+
+def default_profile(home):
+    candidates = native_profiles(home)
     if len(candidates) != 1:
         raise RuntimeError('Could not select one native Firefox profile; pass --profile explicitly')
     return candidates[0]
@@ -95,6 +115,7 @@ class NssDatabase:
             ('NSS_Shutdown', [], C.c_int),
             ('PORT_GetError', [], C.c_int),
             ('SECMOD_AddNewModule', [C.c_char_p, C.c_char_p, C.c_ulong, C.c_ulong], C.c_int),
+            ('SECMOD_DeleteModule', [C.c_char_p, C.POINTER(C.c_int)], C.c_int),
             ('SECMOD_FindModule', [C.c_char_p], C.c_void_p),
             ('SECMOD_DestroyModule', [C.c_void_p], None),
             ('PK11_FindSlotByName', [C.c_char_p], C.c_void_p),
@@ -132,6 +153,11 @@ class NssDatabase:
                    'PKCS11 module registration')
         if not self.loaded():
             raise RuntimeError('NSS did not load the registered module')
+
+    def remove(self):
+        module_type = C.c_int()
+        self.check(self.library.SECMOD_DeleteModule(MODULE_NAME.encode(), C.byref(module_type)),
+                   'PKCS11 module migration')
 
     def certificate_count(self):
         slot = self.library.PK11_FindSlotByName(TOKEN_NAME.encode())
@@ -188,26 +214,46 @@ def backup_databases(profile, home):
     return directory
 
 
-def register(profile, module, home):
+def register(profile, module, home, migrate=False):
     home = home.resolve(strict=True)
     profile = profile.resolve(strict=True)
     if not profile.is_dir() or not profile.is_relative_to(home) or profile.stat().st_uid != os.geteuid():
         raise RuntimeError('Firefox profile must be an owned directory inside the Linux home')
     module = module.absolute()
-    metadata = owned_file(module)
-    if metadata.st_mode & 0o022 or not module.resolve().is_relative_to(home):
-        raise RuntimeError('Expected a protected, user-installed PKCS11 module')
+    system_module = protected_system_module(module)
+    if not system_module:
+        metadata = owned_file(module)
+        if metadata.st_mode & 0o022 or not module.resolve().is_relative_to(home):
+            raise RuntimeError('Expected a protected, user-installed PKCS11 module')
     if any(character in str(module) for character in '\r\n\0'):
         raise RuntimeError('Invalid module path')
     for name in DATABASE_FILES:
         owned_file(profile/name)
     with profile_lock(profile):
         existing = registered_library(profile)
-        if existing is not None and existing != str(module):
+        legacy = home/'.local/lib/desktopid-linux/libdesktopid_pkcs11.so'
+        replace_legacy = migrate and system_module and existing == str(legacy)
+        if replace_legacy:
+            metadata = owned_file(legacy)
+            if metadata.st_mode & 0o022:
+                raise RuntimeError('Legacy module has unsafe permissions; it was preserved')
+        if existing is not None and existing != str(module) and not replace_legacy:
             raise RuntimeError('A different module already uses the DesktopID Alpha name; it was preserved')
-        backup = backup_databases(profile, home) if existing is None else None
+        backup = backup_databases(profile, home) if existing is None or replace_legacy else None
         with NssDatabase(profile) as database:
-            if existing is None:
+            if replace_legacy:
+                try:
+                    database.remove()
+                    database.add(module)
+                except Exception as error:
+                    try:
+                        if database.loaded():
+                            database.remove()
+                        database.add(legacy)
+                    except Exception:
+                        raise RuntimeError('Module migration failed; private backup: '+str(backup)) from error
+                    raise RuntimeError('Module migration failed; previous module restored') from error
+            elif existing is None:
                 database.add(module)
             elif not database.loaded():
                 raise RuntimeError('The configured module could not be loaded')
@@ -216,6 +262,7 @@ def register(profile, module, home):
             raise RuntimeError('NSS did not persist the module path')
     return {'browser': 'native Firefox', 'module': MODULE_NAME, 'profile': str(profile),
             'registered_now': existing is None, 'module_loaded_by_nss': True,
+            'migrated_legacy_module': replace_legacy,
             'certificate_count': count, 'backup_directory': str(backup) if backup else None,
             'remote_signature_requested': False}
 

@@ -5,6 +5,7 @@ pub mod bridge;
 pub mod client;
 pub mod gui;
 pub mod identity;
+pub mod installation;
 pub mod protocol;
 mod session_cache;
 pub mod signing;

@@ -42,7 +42,7 @@ O acesso confirmado ao GERID não implica compatibilidade com todos os serviços
 
 ## Instalação e primeiros passos
 
-As instruções para preparar e instalar a alpha estão no [guia de instalação](docs/DEVELOPMENT.md).
+Para usar o pacote já compilado no Fedora, consulte o [guia de instalação e testes](docs/TESTING.md). Não é necessário instalar ferramentas de desenvolvimento. Para compilar a partir do código, consulte o [guia técnico](docs/DEVELOPMENT.md).
 
 1. Instale o aplicativo no Fedora e abra **Axia RemotedID Alpha**.
 2. Escolha se deseja iniciar o aplicativo com a sessão do sistema.
