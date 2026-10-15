@@ -28,7 +28,7 @@ A chave privada do certificado permanece no serviço em nuvem. Senhas e códigos
 
 A sessão temporária mantém apenas o token de autorização em memória, com prazo limitado e separado por aplicativo e certificado. Fechar o navegador ou encerrar a sessão do dispositivo elimina essa autorização local. O serviço em nuvem pode exigir uma nova autorização antes do prazo; a reutilização por dez minutos passou nos testes locais e ainda está em validação no acesso real.
 
-A inicialização automática mostra apenas o estado local dos certificados. A conexão com a conta e as autorizações dependem de uma ação do usuário.
+A inicialização automática mantém o aplicativo na bandeja, sem abrir janela ou aparecer na dock. O menu permite abrir o aplicativo, consultar a quantidade de certificados salvos, alterar a inicialização e sair. A conexão com a conta e as autorizações dependem de uma ação do usuário. Esse comportamento está na build de desenvolvimento; o RPM alpha.1 publicado ainda exibe a mensagem de inicialização.
 
 ## Compatibilidade
 

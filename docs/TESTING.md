@@ -67,6 +67,7 @@ python3 firefox_pkcs11.py --profile /caminho/absoluto/do/perfil
 ## O que testar nesta alpha
 
 - Abertura pelo menu e escolha da inicialização automática.
+- Na build de desenvolvimento: iniciar a sessão sem mensagem ou janela, abrir e sair pelo ícone da bandeja e conferir que só há um ícone mesmo após reabrir o aplicativo. No GNOME, habilite a extensão **AppIndicator and KStatusNotifierItem Support** para mostrar o ícone. O RPM alpha.1 publicado ainda usa o diálogo anterior.
 - Conexão da conta, cadastro e atualização dos certificados.
 - Seleção do certificado e autenticação no Firefox. O acesso ao GERID/INSS já foi confirmado em uso real.
 - Pedidos de autorização ao fechar e reabrir abas no mesmo processo do Firefox. O recurso de sessão de até dez minutos ainda precisa de validação no fluxo real; o serviço pode exigir nova autorização antes desse prazo.

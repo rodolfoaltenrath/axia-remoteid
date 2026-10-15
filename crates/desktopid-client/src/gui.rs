@@ -192,7 +192,7 @@ fn prompt_action(registered: bool) -> Result<Action> {
 fn prompt_autostart() -> Result<bool> {
     let status = zenity().args([
         "--question",
-        "--text=Deseja abrir o Axia RemotedID automaticamente ao entrar no Fedora?\nVocê pode alterar essa opção depois.",
+        "--text=Deseja iniciar o Axia RemotedID com o Fedora?\nEle ficará na bandeja, sem abrir uma janela.\nVocê pode alterar essa opção depois.",
         "--ok-label=Ativar",
         "--cancel-label=Agora não",
     ]).status().context("Não foi possível exibir a opção de inicialização")?;
@@ -272,6 +272,12 @@ pub fn run(store: &Store) -> Result<()> {
             store.path(),
             prompt_autostart,
         )?;
+        // Start the windowless resident after recording the first-run choice.
+        // Closing the GUI leaves it running; choosing Exit in its menu must
+        // not launch it again when this GUI subsequently closes.
+        if let Err(error) = crate::tray::start_background(store) {
+            eprintln!("Não foi possível iniciar a bandeja: {error}");
+        }
         let server = if store.path().try_exists()? {
             store.load()?.0.server
         } else {
@@ -313,19 +319,7 @@ pub fn run_startup(store: &Store) -> Result<()> {
     if !crate::autostart::enabled(&crate::autostart::config_root()?)? {
         return Ok(());
     }
-    let count = if store.path().join("wallet.json").try_exists()? {
-        store.load_wallet_public()?.len()
-    } else {
-        0
-    };
-    let status = zenity().args(["--question", "--no-markup", "--ok-label=Abrir Axia RemotedID", "--cancel-label=Fechar"])
-        .arg(format!("--text=Axia RemotedID iniciou com a sessão.\nCertificados salvos neste computador: {count}.\n\nAbra o aplicativo para conectar ou atualizar os certificados."))
-        .status().context("Não foi possível abrir o Axia RemotedID")?;
-    match status.code() {
-        Some(0) => run(store),
-        Some(1) => Ok(()),
-        _ => anyhow::bail!("Não foi possível exibir a janela de inicialização"),
-    }
+    crate::tray::run(store)
 }
 
 #[cfg(test)]

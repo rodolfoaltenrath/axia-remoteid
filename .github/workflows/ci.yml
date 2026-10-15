@@ -9,7 +9,7 @@ jobs:
     timeout-minutes: 30
     steps:
       - name: Install build and test dependencies
-        run: dnf install -y git cargo rust gcc openssl-devel clippy rustfmt python3 python3-cryptography opensc nss rpm-build desktop-file-utils util-linux
+        run: dnf install -y git cargo rust gcc openssl-devel clippy rustfmt python3 python3-cryptography python3-gobject dbus-daemon opensc nss rpm-build desktop-file-utils util-linux
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
@@ -19,6 +19,8 @@ jobs:
         run: python3 -m unittest discover -s tests -v
       - name: Rust checks
         run: sh scripts/test_rust_wsl.sh
+      - name: Silent startup and tray menu tests
+        run: dbus-run-session -- python3 scripts/tray_smoke.py --binary "$HOME/.cache/desktopid-rust-target/debug/desktopid-client"
       - name: PKCS11 interoperability tests
         run: sh scripts/test_pkcs11_wsl.sh
       - name: Firefox NSS registration tests

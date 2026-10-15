@@ -21,6 +21,7 @@ Requires:       nss
 Requires:       ca-certificates
 Requires:       fedora-release >= 44
 Requires:       fedora-release < 45
+Recommends:     gnome-shell-extension-appindicator
 
 %description
 Axia RemotedID connects Certisign cloud certificates to compatible Linux

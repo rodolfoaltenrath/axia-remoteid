@@ -156,7 +156,7 @@ pub fn configure(root: &Path, binary: &Path, state: &Path, enable: bool) -> Resu
             argument(state.to_str().context("Caminho de estado inválido")?)?
         );
         let content = format!(
-            "[Desktop Entry]\nType=Application\nVersion=1.0\nName={PRODUCT_NAME}\nComment=Abrir o Axia RemotedID ao entrar na sessão\nExec={command}\nTryExec={binary_text}\nIcon=dialog-password\nTerminal=false\nHidden={}\n",
+            "[Desktop Entry]\nType=Application\nVersion=1.0\nName={PRODUCT_NAME}\nComment=Iniciar o Axia RemotedID na bandeja, sem abrir janela\nExec={command}\nTryExec={binary_text}\nIcon=dialog-password\nTerminal=false\nHidden={}\n",
             !enable
         );
         replace_owned(&entry, content.as_bytes())?;
