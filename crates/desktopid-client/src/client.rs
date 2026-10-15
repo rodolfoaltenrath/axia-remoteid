@@ -42,6 +42,12 @@ impl std::fmt::Debug for ServiceError {
     }
 }
 impl std::error::Error for ServiceError {}
+/// Expose only the HTTP status to native UI callers, never the service body.
+pub fn service_status(error: &anyhow::Error) -> Option<u16> {
+    error
+        .downcast_ref::<ServiceError>()
+        .map(|error| error.status)
+}
 #[cfg(test)]
 #[path = "client_tests.rs"]
 mod tests;

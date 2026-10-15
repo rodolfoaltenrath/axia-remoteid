@@ -87,7 +87,7 @@ fn load(root: &Path) -> Result<Option<Preferences>> {
     Ok(Some(preferences))
 }
 
-fn argument(value: &str) -> Result<String> {
+pub fn argument(value: &str) -> Result<String> {
     ensure!(
         !value
             .chars()
@@ -177,7 +177,7 @@ pub fn configure(root: &Path, binary: &Path, state: &Path, enable: bool) -> Resu
     )
 }
 
-pub(crate) fn first_run(
+pub fn first_run(
     root: &Path,
     binary: &Path,
     state: &Path,

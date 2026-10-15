@@ -42,6 +42,36 @@ struct Cli {
 enum Command {
     /// Abre a janela de login, cadastro deste computador e consulta de certificados.
     Gui,
+    /// Detecta os navegadores instalados e configura seus certificados.
+    SetupBrowsers {
+        /// Mostra apenas a detecção local, sem alterar configuração.
+        #[arg(long, conflicts_with = "yes")]
+        list: bool,
+        /// Configuração explícita pelo terminal, sem janela de confirmação.
+        #[arg(long)]
+        yes: bool,
+        #[arg(long, value_enum, requires = "yes")]
+        family: Option<axia_desktop::browsers::Family>,
+    },
+    /// Compatibilidade: configura um perfil específico do Firefox.
+    SetupFirefox {
+        #[arg(long)]
+        profile: Option<PathBuf>,
+        #[arg(long)]
+        module: Option<PathBuf>,
+        #[arg(long)]
+        home: Option<PathBuf>,
+        /// Configuração local explícita, com resultado JSON, sem rede.
+        #[arg(long)]
+        yes: bool,
+    },
+    /// Instala a build compilada para este usuário, sem modificar sua conta.
+    InstallUser {
+        #[arg(long)]
+        target: Option<PathBuf>,
+        #[arg(long)]
+        home: Option<PathBuf>,
+    },
     /// Ativa/desativa a abertura com a sessão; sem opções, mostra a configuração.
     Autostart {
         #[arg(long, conflicts_with = "disable")]
@@ -329,6 +359,95 @@ fn run(cli: Cli) -> Result<()> {
         None => default_state_dir()?,
     };
     let store = Store::new(root)?;
+    if let Command::InstallUser { target, home } = command {
+        axia_desktop::desktop::user()?;
+        let target = match target {
+            Some(path) => path,
+            None => std::env::current_exe()?
+                .parent()
+                .context("Pasta da build ausente")?
+                .to_owned(),
+        };
+        let home = home.unwrap_or(axia_desktop::desktop::home()?);
+        let entry = axia_desktop::desktop::install(&target, &home)?;
+        println!(
+            "Axia RemotedID instalado para este usuário. Atalho: {}",
+            entry.display()
+        );
+        return Ok(());
+    }
+    if let Command::SetupBrowsers { list, yes, family } = command {
+        let home = axia_desktop::desktop::home()?;
+        let inventory = axia_desktop::browsers::discover(&home)?;
+        if list {
+            println!("{}", serde_json::to_string_pretty(&inventory)?);
+            return Ok(());
+        }
+        if !yes {
+            return axia_desktop::browsers::setup_ui(&store, None);
+        }
+        let module = axia_desktop::browsers::module(&home)?;
+        let targets: Vec<_> = inventory
+            .targets
+            .iter()
+            .filter(|target| family.is_none_or(|family| family == target.family))
+            .collect();
+        ensure!(
+            !targets.is_empty(),
+            "Nenhum navegador nativo disponível para configurar"
+        );
+        let mut results = Vec::new();
+        for target in targets {
+            results.push(axia_desktop::browsers::register(
+                target, &module, &home, true,
+            )?);
+        }
+        println!("{}", serde_json::to_string_pretty(&results)?);
+        return Ok(());
+    }
+    if let Command::SetupFirefox {
+        profile,
+        module,
+        home,
+        yes,
+    } = command
+    {
+        if !yes {
+            return axia_desktop::browsers::setup_ui(&store, profile);
+        }
+        let home = home.unwrap_or(axia_desktop::desktop::home()?);
+        let module = match module {
+            Some(path) => path,
+            None => axia_desktop::browsers::module(&home)?,
+        };
+        let target = match profile {
+            Some(database) => axia_desktop::browsers::Target {
+                family: axia_desktop::browsers::Family::Firefox,
+                label: "Firefox".into(),
+                database,
+                create: false,
+            },
+            None => {
+                let targets: Vec<_> = axia_desktop::browsers::discover(&home)?
+                    .targets
+                    .into_iter()
+                    .filter(|target| target.family == axia_desktop::browsers::Family::Firefox)
+                    .collect();
+                ensure!(
+                    targets.len() == 1,
+                    "Escolha um perfil Firefox explicitamente"
+                );
+                targets.into_iter().next().context("Perfil ausente")?
+            }
+        };
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&axia_desktop::browsers::register(
+                &target, &module, &home, true
+            )?)?
+        );
+        return Ok(());
+    }
     if let Command::Autostart { enable, disable } = command {
         let root = desktopid_client::autostart::config_root()?;
         if enable || disable {
@@ -350,16 +469,16 @@ fn run(cli: Cli) -> Result<()> {
         return Ok(());
     }
     if let Command::Startup = command {
-        return desktopid_client::gui::run_startup(&store);
+        return axia_desktop::gui::run_startup(&store);
     }
     if let Command::Gui = command {
-        return desktopid_client::gui::run(&store);
+        return axia_desktop::gui::run(&store);
     }
     if let Command::Pkcs11Sign = command {
-        return desktopid_client::bridge::run(&store);
+        return axia_desktop::bridge::run(&store);
     }
     if let Command::Pkcs11Broker = command {
-        return desktopid_client::bridge::run_broker(&store);
+        return axia_desktop::bridge::run_broker(&store);
     }
     if let Command::RecoverSignTest { run_id } = &command {
         let directory = recover_signing_test(&store, run_id)?;
@@ -790,12 +909,33 @@ fn run(cli: Cli) -> Result<()> {
         | Command::Gui
         | Command::Startup
         | Command::Autostart { .. } => unreachable!(),
+        Command::SetupBrowsers { .. }
+        | Command::SetupFirefox { .. }
+        | Command::InstallUser { .. } => unreachable!(),
     }
     Ok(())
 }
 
 fn main() {
-    if let Err(error) = run(Cli::parse()) {
+    let cli = Cli::parse();
+    let graphical = cli.command.as_ref().is_none_or(|command| {
+        matches!(
+            command,
+            Command::Gui
+                | Command::SetupBrowsers {
+                    list: false,
+                    yes: false,
+                    ..
+                }
+                | Command::SetupFirefox { yes: false, .. }
+        )
+    });
+    if let Err(error) = run(cli) {
+        if graphical && gtk::is_initialized_main_thread() {
+            axia_desktop::ui::message(&format!(
+                "Não foi possível concluir a operação.\n\n{error:#}"
+            ));
+        }
         eprintln!("Erro: {error:#}");
         if error
             .downcast_ref::<desktopid_client::bridge::Cancelled>()

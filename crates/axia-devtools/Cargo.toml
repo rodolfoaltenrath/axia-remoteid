@@ -1,0 +1,26 @@
+[package]
+name = "axia-devtools"
+version.workspace = true
+license.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+description = "Compiled development and packaging tools for Axia RemotedID"
+publish = false
+
+[dependencies]
+anyhow = "1"
+base64 = "0.22"
+clap = { version = "4", features = ["derive", "env"] }
+desktopid-client = { path = "../desktopid-client" }
+flate2 = { version = "1", default-features = false, features = ["rust_backend"] }
+libc = "0.2"
+cryptoki-sys = "0.5"
+libloading = "0.8"
+openssl = "0.10"
+regex = "1"
+serde_json = "1"
+tar = { version = "0.4", default-features = false }
+tempfile = "3"
+toml = { version = "1", default-features = false, features = ["parse", "serde", "std"] }
+zip = { version = "=8.6.0", default-features = false, features = ["deflate-flate2"] }
+zbus = { version = "5", default-features = false, features = ["tokio", "blocking-api"] }

@@ -9,32 +9,35 @@ jobs:
     timeout-minutes: 30
     steps:
       - name: Install build and test dependencies
-        run: dnf install -y git cargo rust gcc openssl-devel clippy rustfmt python3 python3-cryptography python3-gobject dbus-daemon opensc nss rpm-build desktop-file-utils util-linux
+        run: dnf install -y git cargo rust gcc openssl-devel gtk4-devel clippy rustfmt python3 python3-cryptography dbus-daemon opensc nss rpm-build desktop-file-utils util-linux
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
       - name: Check publication contents
-        run: python3 scripts/check_publication.py
-      - name: Python protocol tests
+        run: cargo xtask check-publication
+      - name: Independent Python reference tests
         run: python3 -m unittest discover -s tests -v
       - name: Rust checks
         run: sh scripts/test_rust_wsl.sh
       - name: Silent startup and tray menu tests
-        run: dbus-run-session -- python3 scripts/tray_smoke.py --binary "$HOME/.cache/desktopid-rust-target/debug/desktopid-client"
+        run: cargo xtask tray-smoke --binary "$HOME/.cache/desktopid-rust-target/debug/desktopid-client"
+      - name: Native GTK credentials, cancellation and progress tests
+        run: cargo xtask native-ui-smoke --target "$HOME/.cache/desktopid-rust-target"
       - name: PKCS11 interoperability tests
         run: sh scripts/test_pkcs11_wsl.sh
       - name: Firefox NSS registration tests
-        run: python3 scripts/firefox_nss_smoke.py --module "$HOME/.cache/desktopid-rust-target/debug/libdesktopid_pkcs11.so" --client "$HOME/.cache/desktopid-rust-target/debug/desktopid-client"
+        run: cargo xtask firefox-nss-smoke --module "$HOME/.cache/desktopid-rust-target/debug/libdesktopid_pkcs11.so" --client "$HOME/.cache/desktopid-rust-target/debug/desktopid-client"
       - name: Build Fedora distribution RPM
         run: |
           sh scripts/build_fedora.sh
-          python3 scripts/package_rpm.py --target dist/fedora
+          cargo xtask package-rpm --target dist/fedora
       - name: Install, reinstall and remove the RPM in the Fedora container
         run: |
           dnf install -y dist/axia-remotedid-*.x86_64.rpm
+          install -m 0755 target/release/axia-devtools /tmp/axia-devtools-lab
           useradd --create-home rpm-test
-          runuser -u rpm-test -- python3 "$PWD/scripts/rpm_runtime_smoke.py"
+          runuser -u rpm-test -- /tmp/axia-devtools-lab --root "$PWD" rpm-runtime-smoke
           dnf reinstall -y dist/axia-remotedid-*.x86_64.rpm
           runuser -u rpm-test -- /usr/bin/axia-remotedid --version
           dnf remove -y axia-remotedid
-          python3 scripts/rpm_runtime_smoke.py --check-preserved /home/rpm-test
+          /tmp/axia-devtools-lab --root "$PWD" rpm-runtime-smoke --check-preserved /home/rpm-test

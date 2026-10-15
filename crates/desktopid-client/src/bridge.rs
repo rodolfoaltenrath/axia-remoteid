@@ -12,7 +12,6 @@ use serde::Deserialize;
 use std::{
     io::{self, Read, Write},
     os::fd::AsRawFd,
-    process::{Command, Stdio},
 };
 use zeroize::Zeroizing;
 
@@ -33,53 +32,6 @@ pub(crate) struct Request {
     algorithm: String,
     digest_base64: String,
 }
-fn dialog(label: &str, cached: bool) -> Result<(Zeroizing<String>, Zeroizing<String>)> {
-    ensure!(
-        std::env::var_os("WAYLAND_DISPLAY").is_some() || std::env::var_os("DISPLAY").is_some(),
-        "Sessão gráfica indisponível; nenhuma autorização ou assinatura solicitada"
-    );
-    let label = label
-        .replace('&', "&amp;")
-        .replace('<', "&lt;")
-        .replace('>', "&gt;");
-    let authorization = if cached {
-        "Esta autorização permitirá novas assinaturas com este certificado neste aplicativo por até 10 minutos.\nFechar o aplicativo encerra a autorização. Senha e código não serão guardados."
-    } else {
-        "Autorize somente se você iniciou essa operação."
-    };
-    let text = format!(
-        "Um aplicativo deste computador solicitou uma assinatura digital.\nCertificado: {label}\n{authorization}"
-    );
-    let result = Command::new("/usr/bin/zenity")
-        .args([
-            "--forms",
-            "--title=Axia RemotedID — Autorizar certificado",
-            "--text",
-        ])
-        .arg(text)
-        .arg("--add-password=Senha do aplicativo Certisign")
-        .arg("--add-password=Código do celular (OTP)")
-        .arg("--separator=\n")
-        .arg("--timeout=180")
-        .stdin(Stdio::null())
-        .stderr(Stdio::null())
-        .output()
-        .context("Não foi possível abrir a janela de autorização; nenhuma assinatura solicitada")?;
-    if !result.status.success() {
-        return Err(Cancelled.into());
-    }
-    let raw = Zeroizing::new(result.stdout);
-    let text = std::str::from_utf8(&raw).context("Entrada da janela inválida")?;
-    let mut parts = text.strip_suffix('\n').unwrap_or(text).split('\n');
-    let password = Zeroizing::new(parts.next().context("Senha ausente")?.to_owned());
-    let otp = Zeroizing::new(parts.next().context("OTP ausente")?.to_owned());
-    ensure!(
-        parts.next().is_none() && !password.is_empty() && !otp.is_empty(),
-        "Preencha senha e código; nenhuma assinatura solicitada"
-    );
-    Ok((password, otp))
-}
-
 pub(crate) fn sign_request(
     api: &Api,
     store: &Store,
@@ -202,7 +154,10 @@ pub(crate) fn sign_request(
     }
 }
 
-pub fn run(store: &Store) -> Result<()> {
+pub fn run_with(
+    store: &Store,
+    authorize: impl FnMut(&str) -> Result<(Zeroizing<String>, Zeroizing<String>)>,
+) -> Result<()> {
     let mut input = Vec::new();
     io::stdin().take(8193).read_to_end(&mut input)?;
     ensure!(input.len() <= 8192, "Pedido local excede o limite");
@@ -214,7 +169,7 @@ pub fn run(store: &Store) -> Result<()> {
         request,
         &mut SessionCache::default(),
         false,
-        |label| dialog(label, false),
+        authorize,
     )?;
     println!(
         "{}",
@@ -290,7 +245,10 @@ fn read_request(idle: std::time::Duration) -> Result<Input> {
 
 /// One pipe-connected helper per application. Only public requests/signatures
 /// cross IPC. Closing its parent pipes or idle expiry destroys all tokens.
-pub fn run_broker(store: &Store) -> Result<()> {
+pub fn run_broker_with(
+    store: &Store,
+    mut authorize: impl FnMut(&str) -> Result<(Zeroizing<String>, Zeroizing<String>)>,
+) -> Result<()> {
     let mut cache = SessionCache::default();
     let mut first = true;
     loop {
@@ -309,9 +267,7 @@ pub fn run_broker(store: &Store) -> Result<()> {
         let result = (|| {
             let request = serde_json::from_slice(&input).context("Pedido local inválido")?;
             let api = Api::new(&store.load()?.0.server)?;
-            sign_request(&api, store, request, &mut cache, true, |label| {
-                dialog(label, true)
-            })
+            sign_request(&api, store, request, &mut cache, true, &mut authorize)
         })();
         let failed = result.is_err();
         let response = match result {

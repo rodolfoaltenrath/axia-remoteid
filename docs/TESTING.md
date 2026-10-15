@@ -2,7 +2,19 @@
 
 Este pacote contém o aplicativo compilado para **Fedora 44 x86_64**, com interface gráfica e integração com o Firefox nativo. Não é necessário instalar Rust ou compilar o projeto. Cada pessoa conecta sua própria conta Certisign; o pacote não inclui certificados ou dados de nenhuma conta.
 
-## Requisitos
+## Próxima versão: alpha.2 nativa
+
+A alpha.2 está em teste local e ainda não substitui o download público da alpha.1. Seu RPM se chama `axia-remotedid-0.1.0-0.2.alpha2.fc44.x86_64.rpm`.
+
+Essa versão usa um painel nativo e não exige Python ou Zenity. Não instala Firefox nem Chromium: detecta os navegadores nativos já presentes e oferece **Configurar navegadores**, permitindo selecionar Firefox, a família Chromium ou ambos. As bibliotecas necessárias do Fedora são resolvidas pelo RPM.
+
+Depois de instalar, abra **Axia RemotedID Alpha**, conecte ou atualize a conta e clique em **Configurar navegadores**, com os navegadores escolhidos fechados. O registro mantém backup e preserva módulos de outros aplicativos. No primeiro uso, escolha se deseja iniciar com o sistema; os próximos logins ficam somente na bandeja. Fechar a interface mantém a bandeja ativa.
+
+Firefox já foi confirmado em uso real na versão anterior. Chromium passou em autenticação de laboratório com TLS 1.2 e dados sintéticos; o fluxo real com Certisign ainda precisa de teste. Chrome, Brave, Edge, Vivaldi e Opera são detectados, mas cada distribuição precisa de validação própria. A configuração Flatpak ainda não está disponível.
+
+Para a alpha.2 compactada, abra o executável `axia-remotedid` e escolha **Instalar para este usuário**. Não há instaladores Python ou shell nesse pacote. As instruções abaixo continuam destinadas à alpha.1 publicada.
+
+## Requisitos da alpha.1 publicada
 
 - Fedora 44 de 64 bits, com sessão gráfica. A validação foi feita no GNOME.
 - Firefox instalado pelo Fedora, com um perfil já criado. Se nunca o utilizou, abra e feche o navegador uma vez.
@@ -79,3 +91,5 @@ Assinatura de PDF e compatibilidade com outros navegadores e portais ainda não 
 Informe a versão do Fedora, a versão e a forma de instalação do Firefox, o serviço acessado, a etapa em que ocorreu o problema e a mensagem exibida. Para capturas de tela, oculte dados pessoais. Senhas, códigos temporários, arquivos de identidade e tokens devem permanecer com você.
 
 O projeto é independente e não é um produto oficial da Certisign. Para detalhes técnicos, consulte o [guia de desenvolvimento](DEVELOPMENT.md).
+
+O aplicativo não executa Python ou Zenity. No Fedora 44, GTK depende de GStreamer, cujo pacote exige Python para ferramentas próprias; o gerenciador pode instalar esse interpretador indiretamente. Isso é uma dependência do toolkit do sistema, e não uma rotina Python do Axia. Não desativar nem remover o Python do sistema na máquina do usuário; a indisponibilidade do interpretador é testada somente em contêiner descartável.

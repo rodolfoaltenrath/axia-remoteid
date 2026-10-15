@@ -7,9 +7,9 @@ Exec=/usr/bin/axia-remotedid gui
 TryExec=/usr/bin/axia-remotedid
 Icon=dialog-password
 Terminal=false
-Categories=Utility;Security;System;
-Actions=Firefox;
+Categories=System;Security;
+Actions=Browsers;
 
-[Desktop Action Firefox]
-Name=Integrar Firefox
-Exec=/usr/bin/axia-remotedid setup-firefox
+[Desktop Action Browsers]
+Name=Configurar navegadores
+Exec=/usr/bin/axia-remotedid setup-browsers

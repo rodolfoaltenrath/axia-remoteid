@@ -8,8 +8,8 @@ import sys
 import tempfile
 import unittest
 from unittest.mock import patch
-from scripts.firefox_pkcs11 import default_profile, profile_lock
-from scripts.install_alpha import install_launcher
+from tests.reference.firefox_pkcs11 import default_profile, profile_lock
+from tests.reference.install_alpha import install_launcher
 
 
 class FirefoxIntegrationTests(unittest.TestCase):

@@ -222,6 +222,7 @@ pub fn start_background(store: &Store) -> Result<()> {
     {
         return Ok(());
     }
+    enable_gnome_indicator();
     let mut child = Command::new(std::env::current_exe()?)
         .arg("--state-dir")
         .arg(store.path())
@@ -236,6 +237,47 @@ pub fn start_background(store: &Store) -> Result<()> {
         let _ = child.wait();
     });
     Ok(())
+}
+
+/// A GUI autostart choice also enables installed GNOME indicator support.
+/// This runs only on explicit GUI opening, never during session autostart.
+/// Other desktops and enterprise restrictions are left to their SNI host.
+fn enable_gnome_indicator() {
+    let gnome = std::env::var("XDG_CURRENT_DESKTOP").is_ok_and(|desktop| {
+        desktop
+            .split(':')
+            .any(|name| name.eq_ignore_ascii_case("gnome"))
+    });
+    if !gnome || !Path::new("/usr/share/gnome-shell/extensions/appindicatorsupport@rgcjonas.gmail.com/metadata.json").is_file() { return; }
+    use gtk::{gio, glib::variant::ToVariant};
+    let Ok(bus) = gio::bus_get_sync(gio::BusType::Session, None::<&gio::Cancellable>) else {
+        return;
+    };
+    let available = bus.call_sync(
+        Some("org.freedesktop.DBus"),
+        "/org/freedesktop/DBus",
+        "org.freedesktop.DBus",
+        "NameHasOwner",
+        Some(&("org.kde.StatusNotifierWatcher",).to_variant()),
+        None,
+        gio::DBusCallFlags::NONE,
+        500,
+        None::<&gio::Cancellable>,
+    );
+    if available.is_ok_and(|value| value.get::<(bool,)>() == Some((true,))) {
+        return;
+    }
+    let _ = bus.call_sync(
+        Some("org.gnome.Shell.Extensions"),
+        "/org/gnome/Shell/Extensions",
+        "org.gnome.Shell.Extensions",
+        "EnableExtension",
+        Some(&("appindicatorsupport@rgcjonas.gmail.com",).to_variant()),
+        None,
+        gio::DBusCallFlags::NONE,
+        500,
+        None::<&gio::Cancellable>,
+    );
 }
 
 #[cfg(test)]

@@ -27,5 +27,5 @@ done
 cargo build --workspace --locked
 report="test-results/rust-$(date -u +%Y%m%d-%H%M%S).json"
 DESKTOPID_RUST_VALIDATION=passed DESKTOPID_RUST_TESTS="$rust_tests" \
-    python3 scripts/rust_cli_smoke.py \
+    cargo xtask cli-smoke \
     --binary "$CARGO_TARGET_DIR/debug/desktopid-client" --report "$report"

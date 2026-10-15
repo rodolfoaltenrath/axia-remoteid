@@ -12,8 +12,8 @@ for dependency in cargo rustc gcc pkg-config; do
         exit 1
     fi
 done
-if ! pkg-config --exists openssl; then
-    printf 'Instale os arquivos de desenvolvimento: sudo dnf install openssl-devel\n' >&2
+if ! pkg-config --exists openssl gtk4; then
+    printf 'Instale os arquivos de desenvolvimento: sudo dnf install openssl-devel gtk4-devel\n' >&2
     exit 1
 fi
 

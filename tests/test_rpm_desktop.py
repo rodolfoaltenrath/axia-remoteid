@@ -5,8 +5,8 @@ import unittest
 from unittest.mock import patch
 import os
 
-from scripts import desktop_app
-from scripts.firefox_pkcs11 import register
+from tests.reference import desktop_app
+from tests.reference.firefox_pkcs11 import register
 
 
 class RpmDesktopTests(unittest.TestCase):
@@ -77,9 +77,9 @@ class RpmDesktopTests(unittest.TestCase):
             legacy.chmod(0o700)
             state = {'library': str(legacy)}
             target = Path('/usr/lib64/axia-remotedid/libdesktopid_pkcs11.so')
-            with patch('scripts.firefox_pkcs11.protected_system_module', return_value=True), \
-                    patch('scripts.firefox_pkcs11.registered_library', side_effect=lambda _: state['library']), \
-                    patch('scripts.firefox_pkcs11.NssDatabase') as nss:
+            with patch('tests.reference.firefox_pkcs11.protected_system_module', return_value=True), \
+                    patch('tests.reference.firefox_pkcs11.registered_library', side_effect=lambda _: state['library']), \
+                    patch('tests.reference.firefox_pkcs11.NssDatabase') as nss:
                 database = nss.return_value.__enter__.return_value
                 database.certificate_count.return_value = 1
                 database.add.side_effect = lambda module: state.update(library=str(module))

@@ -10,5 +10,4 @@ pub mod protocol;
 mod session_cache;
 pub mod signing;
 pub mod storage;
-pub mod tray;
 pub mod workflow;

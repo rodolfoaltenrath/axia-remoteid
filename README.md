@@ -8,10 +8,13 @@ O Axia RemotedID conecta certificados em nuvem da Certisign a aplicações Linux
 
 A solução atende profissionais e organizações que precisam acessar serviços com certificado digital em um ambiente Linux. A versão atual está em **fase alpha**, com foco no Fedora e no Firefox nativo.
 
+A próxima alpha traz uma interface nativa e configuração dos navegadores já instalados, sem exigir Python ou Zenity e sem instalar navegador junto. A versão pública para download continua sendo a **alpha.1**; as novidades da **alpha.2** estão em validação.
+
 ## Principais recursos
 
 - **Conexão com a conta:** cadastro do computador e atualização dos certificados pela interface gráfica.
 - **Integração com o Firefox:** disponibilização dos certificados para serviços que oferecem autenticação por certificado digital.
+- **Detecção de navegadores na alpha.2:** preparação do Firefox e da base de certificados dos navegadores Chromium encontrados no computador, com escolha pelo usuário.
 - **Autorização pelo usuário:** solicitação de senha e código temporário do aplicativo Certisign quando uma operação exige autorização.
 - **Sessão temporária:** recurso de reutilização da autorização por até dez minutos no mesmo aplicativo e certificado, para reduzir solicitações repetidas.
 - **Inicialização opcional:** escolha, na primeira abertura, de iniciar o aplicativo ao entrar na sessão do Fedora.
@@ -36,8 +39,10 @@ A inicialização automática mantém o aplicativo na bandeja, sem abrir janela 
 | --- | --- |
 | Fedora 44 com GNOME | Interface gráfica, cadastro e consulta de certificados validados |
 | Firefox nativo | Integração com os certificados disponível |
+| Chromium nativo — alpha.2 | Autenticação TLS 1.2 validada em laboratório; uso real com Certisign ainda precisa de confirmação |
 | GERID / INSS | Acesso real por certificado confirmado, incluindo o segundo fator do serviço |
-| Outros navegadores, Firefox Flatpak e demais portais | Compatibilidade ainda não validada |
+| Chrome, Brave, Edge, Vivaldi e Opera — alpha.2 | Detecção implementada; cada distribuição ainda precisa de validação própria |
+| Navegadores Flatpak e demais portais | Compatibilidade ainda não validada |
 | Assinatura de documentos PDF | Ainda não disponível nesta versão |
 
 O acesso confirmado ao GERID não implica compatibilidade com todos os serviços. A versão alpha destina-se a testes e avaliação; a integração deve ser verificada no ambiente de uso.

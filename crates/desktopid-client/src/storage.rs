@@ -24,7 +24,7 @@ pub struct Store {
     root: PathBuf,
 }
 
-pub(crate) fn check_owned_private(path: &Path, directory: bool) -> Result<()> {
+pub fn check_owned_private(path: &Path, directory: bool) -> Result<()> {
     let metadata = fs::symlink_metadata(path).context("Arquivo da identidade local ausente")?;
     ensure!(
         !metadata.file_type().is_symlink(),
