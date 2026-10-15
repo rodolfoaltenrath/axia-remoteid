@@ -1,5 +1,7 @@
 # Continuidade do Axia RemotedID
 
+**Retomada atual — 15/10/2026:** os pontos 1 a 3 da revisão de navegadores estão concluídos e commitados até `b0667ca`. As pendências 4 a 6, critérios de aceitação, fluxo de commits e instruções para outro computador estão em [CONTINUAR_CORRECOES_NAVEGADORES.md](docs/CONTINUAR_CORRECOES_NAVEGADORES.md). Leia esse plano antes das próximas etapas históricas abaixo. O usuário decidiu fazer o teste manual no Fedora GNOME depois dos seis pontos.
+
 Estado atualizado em 15/10/2026, após concluir a migração dos testes Python para Rust. Leia este arquivo, o [README](README.md), a [referência do protocolo](docs/PROTOCOL.md) e o código atual antes de propor alterações. Este documento substitui o antigo diário de investigação.
 
 ## Migração dos testes para Rust — 15/10/2026
