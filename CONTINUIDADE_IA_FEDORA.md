@@ -1,8 +1,20 @@
 # Continuidade do Axia RemotedID
 
-Estado atualizado em 14/10/2026, após migração do runtime e de todos os scripts Python de `scripts/` para Rust. Leia este arquivo, o [README](README.md), a [referência do protocolo](docs/PROTOCOL.md) e o código atual antes de propor alterações. Este documento substitui o antigo diário de investigação.
+Estado atualizado em 15/10/2026, após concluir a migração dos testes Python para Rust. Leia este arquivo, o [README](README.md), a [referência do protocolo](docs/PROTOCOL.md) e o código atual antes de propor alterações. Este documento substitui o antigo diário de investigação.
 
-## Ferramentas de integração em Rust — segunda etapa concluída
+## Migração dos testes para Rust — 15/10/2026
+
+Os 26 testes restantes em Python foram mapeados para o código Rust atual. Grande parte já tinha equivalente; foram acrescentadas regressões de canonicalização literal, estrutura RSA independente, seleção explícita entre perfis Firefox, bloqueio fcntl entre processos, cancelamento sem registro, ausência de conta e migração idempotente dos próprios atalhos/alias. O teste CLI verifica `--version` sem GUI nem estado, e a suíte GTK isolada verifica que root não cria conta de desktop. A migração NSS com backup continua sendo exercitada pela ferramenta Rust de teste RPM em contêiner descartável.
+
+A suíte e as implementações antigas em `tests/reference`, assim como `requirements-test.txt` e o job `python-reference`, foram retiradas após a cobertura Rust. O fixture histórico `python-vectors.json` e sua exceção de publicação permanecem intactos: são dados sintéticos públicos, não execução Python. A validação RSA usa exponenciação modular e DigestInfo literal; não depende somente da função de verificação de produção. A matriz de cobertura e os comandos estão em `docs/DEVELOPMENT.md`.
+
+As dependências GTK ausentes neste WSL foram preparadas para a compilação. Passaram fmt/Clippy com `-D warnings`, 79 testes Rust comuns, o teste GTK ignorado na suíte comum executado separadamente em Broadway/D-Bus privados, 18 verificações CLI, 14 PKCS#11/OpenSC e Firefox/NSS com carregamento real, backup, rollback, idempotência e conflito. A checagem de publicação passou e o ZIP de fontes contém 75 arquivos, sem `.py`, referências Python executáveis ou requirements de testes. Foi corrigido um defeito anterior do teste de publicação: criar CRLF a partir de um fixture que já tinha CRLF duplicava o caractere CR no Windows; a exceção de hash não foi relaxada.
+
+Relatórios locais: `test-results/rust-20261015-142141.json` e `test-results/rust-test-migration-pkcs11.json` (ignorados pelo Git). Instalação/reinstalação/remoção real de RPM em contêiner não foram repetidas nesta máquina; o cenário Rust continua na CI. Não houve acesso à conta, cadastro, assinatura real, alteração da instalação de usuário ou publicação de release nesta tarefa. As alterações permanecem locais para revisão; não confundir a retirada de Python dos fontes atuais com uma atualização dos assets publicados da alpha.1.
+
+## Histórico de 14/10: ferramentas de integração em Rust
+
+Os parágrafos desta seção descrevem o estado anterior à migração final dos testes; as referências à suíte Python abaixo são históricas e foram superadas pela seção de 15/10.
 
 Revisão posterior do fluxo Python em 14/10/2026: aplicação e ferramentas Rust não chamam Python; os RPMs alpha.2 locais não contêm `.py`/`.sh` nem requisito direto Python/Zenity. Permanecem dez arquivos Python em `tests/` (incluindo dois `__init__.py`), `cryptography` em `requirements-test.txt` e a suíte de referência. A revisão separou essa suíte no job `python-reference`, removeu Python/cryptography da preparação Rust WSL e adicionou GTK de desenvolvimento que faltava. O job Rust e o guia de compilação não pedem Python diretamente; GTK → GStreamer ainda o exige indiretamente no Fedora. `gobject-sys` é binding C de GObject, não Python/GObject.
 

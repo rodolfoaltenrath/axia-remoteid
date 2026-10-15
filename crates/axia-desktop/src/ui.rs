@@ -295,6 +295,14 @@ mod tests {
     #[ignore = "requires isolated graphical display"]
     fn native_forms_clear_passwords_cancel_timeout_and_keep_worker_responsive() {
         init().unwrap();
+        if unsafe { libc::geteuid() } == 0 {
+            let temporary = tempfile::tempdir().unwrap();
+            let state = temporary.path().join("must-not-create-root-account");
+            let store = crate::storage::Store::new(state.clone()).unwrap();
+            let error = crate::gui::run(&store).unwrap_err();
+            assert!(error.to_string().contains("usuário normal"));
+            assert!(!state.exists());
+        }
         let fields = [Field {
             label: "Senha de laboratório",
             secret: true,

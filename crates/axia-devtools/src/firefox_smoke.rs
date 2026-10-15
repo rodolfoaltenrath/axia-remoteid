@@ -117,6 +117,65 @@ pub fn worker(module: &Path, client: &Path, home: &Path) -> Result<()> {
         nss::registered_library(&profile)?.as_deref() == Some(module),
         "Registro NSS mudou biblioteca"
     );
+    // Reproduce an obsolete or removed alpha.1 RPM registration without
+    // installing anything in /usr or touching a real browser profile.
+    if desktopid_client::installation::runtime::system_module().is_none() {
+        let user_module = home.join(".local/lib/desktopid-linux/libdesktopid_pkcs11.so");
+        let user_helper = home.join(".local/libexec/desktopid-linux/desktopid-client");
+        for path in [&user_module, &user_helper] {
+            fs::create_dir_all(path.parent().unwrap())?;
+        }
+        fs::copy(client, &user_helper)?;
+        fs::set_permissions(&user_helper, fs::Permissions::from_mode(0o700))?;
+        let old_registration =
+            String::from_utf8(saved)?.replace(module.to_str().unwrap(), nss::SYSTEM_MODULE);
+        lab::private_write(&profile.join("pkcs11.txt"), old_registration.as_bytes())?;
+        ensure!(
+            nss::registered_library(&profile)?.as_deref() == Some(Path::new(nss::SYSTEM_MODULE)),
+            "Fixture NSS não apontou para o RPM anterior"
+        );
+        // This looks compatible to the selection preflight but is deliberately
+        // not a loadable library, so NSS must restore the previous registration.
+        lab::private_write(
+            &user_module,
+            &[
+                b"\x7fELFinvalid laboratory provider".as_slice(),
+                desktopid_client::installation::runtime::MARKER,
+            ]
+            .concat(),
+        )?;
+        fs::set_permissions(&user_module, fs::Permissions::from_mode(0o700))?;
+        register(&user_module, false)?;
+        ensure!(
+            fs::read(profile.join("pkcs11.txt"))? == old_registration.as_bytes(),
+            "Falha da migração RPM antigo/usuário não restaurou o registro"
+        );
+        fs::copy(module, &user_module)?;
+        fs::set_permissions(&user_module, fs::Permissions::from_mode(0o700))?;
+        let migrated = register(&user_module, true)?;
+        ensure!(
+            migrated["migrated_legacy_module"] == true
+                && migrated["certificate_count"] == 1
+                && migrated["backup_directory"].is_string(),
+            "Migração RPM antigo/usuário não concluída com backup"
+        );
+        let backup = Path::new(migrated["backup_directory"].as_str().unwrap());
+        ensure!(
+            fs::read(backup.join("pkcs11.txt"))? == old_registration.as_bytes()
+                && lab::mode(backup)? == 0o700,
+            "Backup do módulo antigo não foi preservado privadamente"
+        );
+        let repeated = register(&user_module, true)?;
+        ensure!(
+            repeated["registered_now"] == false
+                && repeated["migrated_legacy_module"] == false
+                && repeated["backup_directory"].is_null(),
+            "Migração repetida não é idempotente"
+        );
+        println!(
+            "Firefox/NSS: obsolete RPM to native user runtime, failed migration rollback, private backup and idempotence passed."
+        );
+    }
     println!(
         "Firefox/NSS: load, certificate/key discovery without password callback, persistence, idempotence, private backup, rollback and conflict checks passed; no cloud calls."
     );

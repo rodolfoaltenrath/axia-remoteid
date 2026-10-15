@@ -144,12 +144,22 @@ fn launcher(home: &Path) -> Result<PathBuf> {
     self::directory(&commands, home, false)?;
     let command = commands.join("axia-remotedid");
     if command.try_exists()? || command.is_symlink() {
-        ensure!(
-            command.is_symlink()
-                && fs::symlink_metadata(&command)?.uid() == unsafe { libc::geteuid() }
-                && command.canonicalize()? == binary.canonicalize()?,
-            "Comando de outro aplicativo foi preservado"
-        );
+        let previous_system_alias = command.is_symlink()
+            && fs::symlink_metadata(&command)?.uid() == unsafe { libc::geteuid() }
+            && fs::read_link(&command)? == Path::new(crate::installation::SYSTEM_LAUNCHER)
+            && crate::installation::system_helper().is_none();
+        if previous_system_alias {
+            let temporary = command.with_extension(format!("{}.pending", nonce()?));
+            std::os::unix::fs::symlink(&binary, &temporary)?;
+            fs::rename(temporary, &command)?;
+        } else {
+            ensure!(
+                command.is_symlink()
+                    && fs::symlink_metadata(&command)?.uid() == unsafe { libc::geteuid() }
+                    && command.canonicalize()? == binary.canonicalize()?,
+                "Comando de outro aplicativo foi preservado"
+            );
+        }
     } else {
         std::os::unix::fs::symlink(binary, command)?;
     }
@@ -163,7 +173,7 @@ pub fn install(target: &Path, home: &Path) -> Result<PathBuf> {
         !home.starts_with("/mnt"),
         "Instale no sistema de arquivos Linux"
     );
-    for (source, destination) in [
+    let artifacts = [
         (
             target.join("desktopid-client"),
             home.join(".local/libexec/desktopid-linux/desktopid-client"),
@@ -172,12 +182,23 @@ pub fn install(target: &Path, home: &Path) -> Result<PathBuf> {
             target.join("libdesktopid_pkcs11.so"),
             home.join(".local/lib/desktopid-linux/libdesktopid_pkcs11.so"),
         ),
-    ] {
+    ]
+    .into_iter()
+    .map(|(source, destination)| {
+        let metadata = fs::symlink_metadata(&source)?;
+        ensure!(
+            metadata.is_file(),
+            "A instalação exige arquivos ELF regulares"
+        );
         let bytes = fs::read(source)?;
         ensure!(
-            bytes.starts_with(b"\x7fELF"),
-            "A instalação exige arquivos ELF compilados"
+            crate::installation::runtime::native_bytes(&bytes),
+            "Pacote antigo ou incompatível; use o módulo e o auxiliar da versão nativa atual"
         );
+        Ok((bytes, destination))
+    })
+    .collect::<Result<Vec<_>>>()?;
+    for (bytes, destination) in artifacts {
         directory(
             destination.parent().context("Diretório ausente")?,
             &home,
@@ -190,10 +211,13 @@ pub fn install(target: &Path, home: &Path) -> Result<PathBuf> {
 
 /// Hide only our exact legacy entries after a protected system install exists.
 pub fn migrate_shortcuts(home: &Path) -> Result<()> {
-    let system = Path::new("/usr/bin/axia-remotedid");
     if crate::installation::system_helper().is_none() {
         return Ok(());
     }
+    migrate_shortcuts_to(home, Path::new("/usr/bin/axia-remotedid"))
+}
+
+fn migrate_shortcuts_to(home: &Path, system: &Path) -> Result<()> {
     let legacy = home.join(".local/libexec/desktopid-linux/desktopid-client");
     let argument = crate::autostart::argument(legacy.to_str().context("Caminho inválido")?)?;
     for name in [
@@ -258,8 +282,53 @@ pub fn migrate_shortcuts(home: &Path) -> Result<()> {
 }
 
 #[cfg(test)]
+#[path = "runtime_install_tests.rs"]
+mod runtime_install_tests;
+
+#[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn migration_hides_only_our_legacy_entry_updates_alias_and_is_idempotent() {
+        let temporary = tempfile::tempdir().unwrap();
+        let home = temporary.path();
+        let legacy = home.join(".local/libexec/desktopid-linux/desktopid-client");
+        fs::create_dir_all(legacy.parent().unwrap()).unwrap();
+        fs::write(&legacy, b"laboratory legacy executable").unwrap();
+        let system = home.join("native-system-launcher");
+        fs::write(&system, b"laboratory system executable").unwrap();
+        let applications = home.join(".local/share/applications");
+        fs::create_dir_all(&applications).unwrap();
+        let entry = applications.join("axia-remotedid-alpha.desktop");
+        fs::write(
+            &entry,
+            format!(
+                "[Desktop Entry]\nName=Axia RemotedID Alpha\nExec=\"{}\" gui\n",
+                legacy.display()
+            ),
+        )
+        .unwrap();
+        let foreign = applications.join("desktopid-linux-alpha.desktop");
+        let original_foreign =
+            b"[Desktop Entry]\nName=DesktopID Linux Alpha\nExec=/usr/bin/other\n";
+        fs::write(&foreign, original_foreign).unwrap();
+        let alias = home.join(".local/bin/axia-remotedid");
+        fs::create_dir_all(alias.parent().unwrap()).unwrap();
+        std::os::unix::fs::symlink(&legacy, &alias).unwrap();
+        migrate_shortcuts_to(home, &system).unwrap();
+        let hidden = fs::read(&entry).unwrap();
+        assert_eq!(
+            ini(std::str::from_utf8(&hidden).unwrap()).unwrap()["Desktop Entry"]["hidden"],
+            "true"
+        );
+        assert_eq!(fs::read(&foreign).unwrap(), original_foreign);
+        assert_eq!(fs::read_link(&alias).unwrap(), system);
+        migrate_shortcuts_to(home, &system).unwrap();
+        assert_eq!(fs::read(entry).unwrap(), hidden);
+        assert_eq!(fs::read(foreign).unwrap(), original_foreign);
+        assert_eq!(fs::read_link(alias).unwrap(), system);
+    }
     #[test]
     fn native_install_preserves_account_and_refuses_foreign_launcher() {
         let temporary = tempfile::tempdir().unwrap();
@@ -268,7 +337,15 @@ mod tests {
         let target = temporary.path().join("build");
         fs::create_dir(&target).unwrap();
         for name in ["desktopid-client", "libdesktopid_pkcs11.so"] {
-            fs::write(target.join(name), b"\x7fELFlaboratory").unwrap();
+            fs::write(
+                target.join(name),
+                [
+                    b"\x7fELFlaboratory".as_slice(),
+                    crate::installation::runtime::MARKER,
+                ]
+                .concat(),
+            )
+            .unwrap();
         }
         let identity = home.join(".config/desktopid-linux/sentinel");
         fs::create_dir_all(identity.parent().unwrap()).unwrap();

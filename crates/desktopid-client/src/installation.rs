@@ -1,6 +1,8 @@
 //! Trusted system runtime installed by the Fedora RPM.
 use std::{fs, io::Read, os::unix::fs::MetadataExt, path::Path};
 
+pub mod runtime;
+
 pub const SYSTEM_HELPER: &str = "/usr/libexec/axia-remotedid/desktopid-client";
 pub const SYSTEM_LAUNCHER: &str = "/usr/bin/axia-remotedid";
 
@@ -24,8 +26,13 @@ pub fn system_helper() -> Option<&'static Path> {
     let launcher = Path::new(SYSTEM_LAUNCHER);
     (protected_system_file(path)
         && protected_system_file(launcher)
-        && same_native_executable(path, launcher))
+        && native_executable_pair(path, launcher)
+        && runtime::protected_module(Path::new(runtime::SYSTEM_MODULE)))
     .then_some(path)
+}
+
+fn native_executable_pair(helper: &Path, launcher: &Path) -> bool {
+    same_native_executable(helper, launcher) && runtime::native_artifact(helper)
 }
 
 // The alpha.2 RPM installs these paths as hardlinks to one ELF. The alpha.1

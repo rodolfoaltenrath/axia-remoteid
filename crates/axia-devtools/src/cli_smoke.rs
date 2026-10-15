@@ -37,6 +37,12 @@ pub fn smoke(root: &Path, binary: &Path, report: &Path) -> Result<()> {
         "--access-url",
         "laboratory",
     ];
+    let version = run(&missing, &["--version"], true)?;
+    ensure!(
+        !version.stdout.is_empty() && version.stderr.is_empty() && !missing.exists(),
+        "CLI --version iniciou configuração gráfica ou criou estado"
+    );
+    checks.push("cli-version-without-display-browser-setup-or-account-state");
     run(&state, &init, true)?;
     let original = fs::read(state.join("identity.pem"))?;
     ensure!(

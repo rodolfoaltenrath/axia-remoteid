@@ -32,7 +32,7 @@ Canonicalização compatível com o original:
 5. Objetos são percorridos recursivamente; arrays de objetos preservam sua ordem.
 6. O cliente rejeita floats, inteiros fora desse intervalo e arrays escalares sem contrato comprovado.
 
-Assinar essa sequência com RSA PKCS#1 v1.5/SHA-256 da instalação e codificar em Base64. Isso produz a autorização dos pedidos de carteira, sessão e assinatura. Os vetores públicos de interoperabilidade comparam o modelo Python independente e o Rust.
+Assinar essa sequência com RSA PKCS#1 v1.5/SHA-256 da instalação e codificar em Base64. Isso produz a autorização dos pedidos de carteira, sessão e assinatura. Os testes Rust conferem os vetores públicos históricos gerados pelo modelo Python independente, além de bytes literais do protocolo e da estrutura RSA. O modelo Python foi retirado após a migração dos testes; o fixture permanece como dados estáticos de interoperabilidade.
 
 ## Referência do certificado e resposta de assinatura
 

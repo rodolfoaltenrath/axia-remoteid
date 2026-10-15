@@ -48,6 +48,7 @@ export!(C_Finalize(reserved: *mut c_void) {
     *lock = None; helper::clear_authorization(); CKR_OK
 });
 export!(C_GetInfo(info: *mut CK_INFO) {
+    desktopid_client::installation::runtime::retain_marker();
     with_state(|_| {
         if info.is_null() { return CKR_ARGUMENTS_BAD; }
         *info = CK_INFO { cryptokiVersion:CK_VERSION { major:2, minor:40 },

@@ -6,10 +6,10 @@ Para instalar o pacote pré-compilado sem ferramentas de desenvolvimento, siga o
 
 ## Compilar e testar no Fedora
 
-Use Rust/Cargo compatível com o workspace (mínimo declarado 1.88; validação realizada com 1.98.1), GTK 4 e OpenSSL de desenvolvimento. Empacotamento, diagnóstico e testes de integração são ferramentas Rust. Python permanece somente nas regressões independentes em `tests/`, com as implementações de referência em `tests/reference`. Os comandos abaixo usam os pacotes do Fedora:
+Use Rust/Cargo compatível com o workspace (mínimo declarado 1.88; validação realizada com 1.98.1), GTK 4 e OpenSSL de desenvolvimento. Aplicativo, empacotamento, diagnóstico e testes são Rust. As antigas regressões Python foram incorporadas aos testes das crates e às ferramentas de integração. Os comandos abaixo usam os pacotes do Fedora:
 
 ```bash
-sudo dnf install rust cargo gcc openssl-devel gtk4-devel clippy rustfmt dbus-daemon opensc
+sudo dnf install rust cargo gcc openssl-devel gtk4-devel clippy rustfmt dbus-daemon opensc nss desktop-file-utils
 export CARGO_TARGET_DIR="$HOME/.cache/desktopid-rust-target"
 sh scripts/test_rust_wsl.sh
 sh scripts/test_pkcs11_wsl.sh
@@ -20,14 +20,17 @@ cargo build --release --workspace --locked
 
 Os testes usam dados sintéticos e servidor local; não entram na conta nem solicitam assinaturas reais. Os scripts terminados em `_wsl.sh` também funcionam diretamente no Fedora nativo. A janela de autorização é GTK nativa e exige uma sessão gráfica. Nenhum interpretador é usado pelo aplicativo instalado. O mínimo Rust declarado ainda precisa de validação separada.
 
-A suíte independente de referência é separada da compilação, do runtime e das ferramentas de integração Rust. Para executá-la também:
+A CI executa a suíte Cargo e as integrações compiladas no job Fedora. Não há job Python, `requirements-test.txt` ou código Python de testes no projeto. As bibliotecas GTK/GStreamer do Fedora ainda podem instalar Python indiretamente para ferramentas do sistema; isso não torna o interpretador uma rotina do Axia nem autoriza remover o Python do sistema.
 
-```bash
-sudo dnf install python3 python3-cryptography
-python3 -m unittest discover -s tests -v
-```
+### Cobertura migrada dos 26 testes Python
 
-`requirements-test.txt` atende somente essa suíte. Na CI, ela roda no job `python-reference`; o job Fedora de compilação, empacotamento e integração não solicita esses pacotes diretamente. As bibliotecas GTK/GStreamer do Fedora ainda podem instalar Python indiretamente.
+| Suíte anterior | Cobertura Rust vigente |
+| --- | --- |
+| Protocolo: 14 testes | `crates/desktopid-client/tests/protocol.rs`: canonicalização com bytes literais e limites int64; PIN/OTP e payload exato; digest/tamanho; respostas inválidas e ID opcional; ordem/split do keyName; prazo original; assinatura RSA e rejeição de alteração |
+| Firefox: 6 testes | `axia-desktop::browsers::tests`: prioridade Install, múltiplos perfis sem escolha implícita, fcntl mantido por outro processo e recusa de symlink; `axia-desktop::desktop::tests`: atalho com espaços/metacaracteres, validação XDG e recusa de atalho estrangeiro |
+| Desktop/RPM: 6 testes | Testes de migração dos próprios atalhos/alias, cancelamento sem registro e ausência de conta sem configuração; `cargo xtask cli-smoke` para CLI sem GUI/estado; `native-ui-smoke` para recusa de conta root; `rpm-runtime-smoke` para migração NSS real com backup e preservação após remoção |
+
+O fixture histórico `python-vectors.json` permanece como dados públicos imutáveis gerados pela implementação independente anterior; não executa Python. A nova regressão RSA calcula `s^e mod n` e confere os bytes EMSA-PKCS1-v1_5/SHA-256, sem depender do verificador de produção. O bloqueio Firefox é exercitado por um processo separado com `fcntl`, em vez de simular um bloqueio no mesmo processo. Cancelamento substitui apenas a fronteira gráfica e verifica que o fluxo de configuração não chama o registro nem altera o perfil. Os testes NSS e RPM usam as bibliotecas/CLI reais em estado sintético.
 
 O instalador grava a biblioteca em `~/.local/lib/desktopid-linux/libdesktopid_pkcs11.so` e o auxiliar em `~/.local/libexec/desktopid-linux/desktopid-client`. Não registra automaticamente o módulo no navegador ou em p11-kit. A configuração dos navegadores é uma ação posterior do usuário, pelo painel nativo.
 
@@ -112,7 +115,7 @@ O RPM e seu checksum ficam em `dist/`, ignorados pelo Git. O pacote declara as d
 
 A integração NSS ocorre na sessão do usuário, pela interface gráfica, com o Firefox fechado. Nenhum script de instalação ou remoção do RPM modifica perfis ou estados de contas. A migração do módulo legado para o módulo do RPM exige ação do usuário, mantém backup e tenta restaurar o módulo anterior se a troca falhar. O atalho do sistema usa um ID próprio; a primeira abertura oculta somente os atalhos legados reconhecidos do projeto e atualiza seu próprio alias, preservando arquivos de terceiros e os dados da identidade.
 
-A seleção automática de executável RPM exige auxiliar e lançador protegidos, com o mesmo inode ELF da alpha.2. A instalação nativa por usuário não redireciona GUI, bandeja, autostart ou auxiliar para o wrapper shell/Python do RPM alpha.1 caso ambos estejam presentes.
+A seleção automática do RPM exige módulo, auxiliar e lançador protegidos, com identificador de runtime nativo compatível; auxiliar e lançador também precisam ser hardlinks do mesmo ELF. Um RPM antigo ou incompleto não oculta a instalação por usuário nem prevalece sobre ela. O instalador e o empacotador recusam componentes antigos ou misturados antes de substituir os arquivos existentes. Builds anteriores sem identificador exigem recompilar e reinstalar o par módulo/auxiliar. A configuração dos navegadores pode trocar o registro exato do RPM obsoleto pelo módulo nativo do usuário, mediante a ação explícita no botão, com backup, rollback e preservação de módulos de terceiros. Detalhes em [correção 1: seleção de runtime](FIX_01_RUNTIME.md).
 
 ## Usar a conta e testar uma assinatura
 
@@ -198,8 +201,7 @@ cargo xtask firefox-nss-smoke --module dist/fedora/libdesktopid_pkcs11.so --clie
 | `crates/axia-desktop` | CLI, painel GTK, autorização, instalação, detecção e configuração de navegadores e bandeja |
 | `crates/desktopid-pkcs11` | Biblioteca nativa PKCS#11 |
 | `crates/axia-devtools` | Empacotamento, publicação, diagnóstico, fixtures, inventário e testes de integração em Rust (`cargo xtask`) |
-| `tests/reference` | Oráculos Python de protocolo, NSS e instalação, usados somente nos testes |
-| `tests` e testes nas crates | Regressões e interoperabilidade |
+| `crates/*/tests` e módulos `#[cfg(test)]` | Regressões Rust, vetores históricos e interoperabilidade |
 | `scripts` | Entradas shell/PowerShell para compilação e ferramentas Rust, inclusive no WSL |
 | `.github/workflows/ci.yml` | Testes automáticos em contêiner Fedora |
 

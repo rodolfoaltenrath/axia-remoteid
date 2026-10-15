@@ -223,8 +223,8 @@ fn run(cli: Cli) -> Result<bool> {
             helper,
             state_dir,
         } => {
-            let (module, helper, state) = sign_test::paths(module, helper, state_dir)?;
             if inventory_only {
+                let (module, state) = sign_test::inventory_paths(module, state_dir)?;
                 // Run in a child: never modify the parent process environment.
                 let mut command = std::process::Command::new(std::env::current_exe()?);
                 command
@@ -234,6 +234,7 @@ fn run(cli: Cli) -> Result<bool> {
                 let output = lab::successful(&mut command)?;
                 print!("{}", String::from_utf8_lossy(&output.stdout));
             } else {
+                let (module, helper, state) = sign_test::paths(module, helper, state_dir)?;
                 sign_test::run(&module, &helper, &state, certificate_index)?;
             }
         }

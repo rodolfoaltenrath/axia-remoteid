@@ -22,11 +22,12 @@ struct Executable {
 fn executable() -> Result<Executable, CK_RV> {
     let path = std::env::var_os("DESKTOPID_HELPER")
         .map(PathBuf::from)
-        .or_else(|| desktopid_client::installation::system_helper().map(Path::to_owned))
         .or_else(|| {
-            std::env::var_os("HOME").map(|home| {
-                PathBuf::from(home).join(".local/libexec/desktopid-linux/desktopid-client")
-            })
+            std::env::var_os("HOME")
+                .and_then(|home| {
+                    desktopid_client::installation::runtime::select(Path::new(&home)).ok()
+                })
+                .map(|runtime| runtime.helper)
         })
         .ok_or(CKR_FUNCTION_FAILED)?;
     let metadata = fs::symlink_metadata(&path).map_err(|_| CKR_FUNCTION_FAILED)?;

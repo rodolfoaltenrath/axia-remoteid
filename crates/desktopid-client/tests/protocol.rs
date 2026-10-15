@@ -15,6 +15,78 @@ fn fixture() -> Value {
 }
 
 #[test]
+fn recovered_canonicalization_matches_literal_wire_bytes() {
+    for (body, expected) in [
+        (
+            json!({"z":"fim", "push":true, "a":"inicio", "ignore":false, "null":null}),
+            "iniciopushfim",
+        ),
+        (
+            json!({"sessionToken":"token", "hashArray":[{"id":0,"hash":"HASH"}], "algorithm":"SHA256"}),
+            "SHA256HASH0token",
+        ),
+        (json!({"a":"João\n\""}), "João\n\""),
+        (
+            json!({"a": i64::MIN, "z": i64::MAX}),
+            "-92233720368547758089223372036854775807",
+        ),
+    ] {
+        assert_eq!(
+            protocol::flatten_values(&body).unwrap(),
+            expected.as_bytes()
+        );
+    }
+}
+
+#[test]
+fn authorization_has_exact_rsa_encoded_message_and_rejects_changed_body() {
+    use openssl::{
+        bn::{BigNum, BigNumContext},
+        hash::MessageDigest,
+        pkey::PKey,
+        rsa::Padding,
+        sign::Verifier,
+    };
+
+    let identity = Identity::generate().unwrap();
+    let key = PKey::public_key_from_pem(identity.public_pem().unwrap().as_bytes()).unwrap();
+    let rsa = key.rsa().unwrap();
+    let body = json!({"momento":"1700000000", "desktopCode":"lab"});
+    let header = identity.authorization(&body).unwrap();
+    let signature = STANDARD
+        .decode(header.strip_prefix("Bearer ").unwrap())
+        .unwrap();
+    assert_eq!(signature.len(), 256);
+    // Independently inspect s^e mod n and literal EMSA-PKCS1-v1_5 bytes;
+    // do not ask the production verifier to validate its own output.
+    let mut encoded = BigNum::new().unwrap();
+    encoded
+        .mod_exp(
+            &BigNum::from_slice(&signature).unwrap(),
+            rsa.e(),
+            rsa.n(),
+            &mut BigNumContext::new().unwrap(),
+        )
+        .unwrap();
+    let mut digest_info = vec![
+        0x30, 0x31, 0x30, 0x0d, 0x06, 0x09, 0x60, 0x86, 0x48, 0x01, 0x65, 0x03, 0x04, 0x02, 0x01,
+        0x05, 0x00, 0x04, 0x20,
+    ];
+    digest_info.extend_from_slice(&openssl::sha::sha256(b"lab1700000000"));
+    let mut expected = vec![0, 1];
+    expected.extend(vec![0xff; 256 - digest_info.len() - 3]);
+    expected.push(0);
+    expected.extend(digest_info);
+    assert_eq!(encoded.to_vec_padded(256).unwrap(), expected);
+    for (bytes, accepted) in [(b"lab1700000000", true), (b"lab1700000001", false)] {
+        let mut verifier = Verifier::new(MessageDigest::sha256(), &key).unwrap();
+        verifier.set_rsa_padding(Padding::PKCS1).unwrap();
+        verifier.update(bytes).unwrap();
+        assert_eq!(verifier.verify(&signature).unwrap(), accepted);
+    }
+}
+
+#[test]
 fn public_wallet_inventory_does_not_read_installation_private_key() {
     let temporary = tempfile::tempdir().unwrap();
     let store = Store::new(temporary.path().join("identity")).unwrap();
@@ -182,9 +254,10 @@ fn request_keeps_leading_zeroes_and_sends_digest_only() {
         serial: "serial",
     };
     let body = protocol::session_payload("lab", &reference, "0001", "001234", false, "test");
-    assert_eq!(body["pin"], "0001");
-    assert_eq!(body["otp"], "001234");
-    assert_eq!(body["push"], false);
+    assert_eq!(
+        body,
+        json!({"desktopCode":"lab", "pin":"0001", "otp":"001234", "push":false, "nomeAplicacaoDesktop":"test", "serialNumber":"serial", "issue":"issuer"})
+    );
     let body = protocol::signature_payload("lab", &reference, "token", Algorithm::Sha256, &[7; 32])
         .unwrap();
     assert_eq!(

@@ -277,10 +277,10 @@ mod tests {
         let data = include_bytes!("../../desktopid-client/tests/fixtures/python-vectors.json");
         fs::write(&fixture, data)?;
         assert!(inspect(root.path(), std::slice::from_ref(&name))?.is_empty());
-        fs::write(
-            &fixture,
-            String::from_utf8_lossy(data).replace('\n', "\r\n"),
-        )?;
+        let lf = normalize_crlf(data);
+        fs::write(&fixture, &lf)?;
+        assert!(inspect(root.path(), std::slice::from_ref(&name))?.is_empty());
+        fs::write(&fixture, String::from_utf8_lossy(&lf).replace('\n', "\r\n"))?;
         assert!(inspect(root.path(), std::slice::from_ref(&name))?.is_empty());
         fs::copy(&fixture, root.path().join("copy.json"))?;
         assert!(!inspect(root.path(), &["copy.json".into()])?.is_empty());

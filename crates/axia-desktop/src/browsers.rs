@@ -21,7 +21,7 @@ use std::{
 };
 
 pub const MODULE_NAME: &str = "DesktopID Linux Alpha";
-pub const SYSTEM_MODULE: &str = "/usr/lib64/axia-remotedid/libdesktopid_pkcs11.so";
+pub use crate::installation::runtime::SYSTEM_MODULE;
 const FILES: [&str; 3] = ["pkcs11.txt", "cert9.db", "key4.db"];
 const BACKUP_FILES: [&str; 9] = [
     "pkcs11.txt",
@@ -56,6 +56,24 @@ pub struct Inventory {
     pub installed: Vec<String>,
     pub targets: Vec<Target>,
     pub notices: Vec<String>,
+}
+
+impl Inventory {
+    /// Never guess among multiple installation defaults.
+    pub fn firefox_target(self) -> Result<Target> {
+        let mut targets = self
+            .targets
+            .into_iter()
+            .filter(|target| target.family == Family::Firefox);
+        let target = targets
+            .next()
+            .context("Escolha um perfil Firefox explicitamente")?;
+        ensure!(
+            targets.next().is_none(),
+            "Escolha um perfil Firefox explicitamente"
+        );
+        Ok(target)
+    }
 }
 
 fn absolute_environment(name: &str, default: PathBuf) -> Result<PathBuf> {
@@ -220,18 +238,7 @@ pub fn discover(home: &Path) -> Result<Inventory> {
 }
 
 pub fn module(home: &Path) -> Result<PathBuf> {
-    let system = Path::new(SYSTEM_MODULE);
-    if crate::installation::protected_system_file(system) {
-        return Ok(system.to_owned());
-    }
-    let user = home.join(".local/lib/desktopid-linux/libdesktopid_pkcs11.so");
-    let metadata = desktop::owned_file(&user)
-        .context("Instale o Axia RemotedID antes de configurar os navegadores")?;
-    ensure!(
-        metadata.mode() & 0o022 == 0,
-        "Biblioteca instalada possui permissões inseguras"
-    );
-    Ok(user)
+    Ok(crate::installation::runtime::select(home)?.module)
 }
 
 pub fn registered_library(database: &Path) -> Result<Option<PathBuf>> {
@@ -544,8 +551,13 @@ pub fn register(
     migrate: bool,
 ) -> Result<Registration> {
     let home = home.canonicalize()?;
-    let system =
-        module == Path::new(SYSTEM_MODULE) && crate::installation::protected_system_file(module);
+    let system = module == Path::new(SYSTEM_MODULE);
+    if system {
+        ensure!(
+            crate::installation::runtime::system_module() == Some(module),
+            "Runtime do RPM antigo ou incompleto; atualize o RPM ou instale a versão nativa para este usuário"
+        );
+    }
     if !system {
         let metadata = desktop::owned_file(module)?;
         ensure!(
@@ -584,8 +596,12 @@ pub fn register(
     let _lock = profile_lock(&database, target.family)?;
     let existing = registered_library(&database)?;
     let legacy = home.join(".local/lib/desktopid-linux/libdesktopid_pkcs11.so");
-    let migrated = migrate && system && existing.as_ref() == Some(&legacy);
-    if migrated {
+    let from_user = system && existing.as_ref() == Some(&legacy);
+    let from_old_system = existing.as_deref().is_some_and(|existing| {
+        crate::installation::runtime::can_replace_old_system(&home, existing, module)
+    });
+    let migrated = migrate && (from_user || from_old_system);
+    if migrated && from_user {
         ensure!(
             desktop::owned_file(&legacy)?.mode() & 0o022 == 0,
             "Módulo anterior possui permissões inseguras; foi preservado"
@@ -658,13 +674,59 @@ pub fn register(
 pub fn setup_ui(store: &crate::storage::Store, profile: Option<PathBuf>) -> Result<()> {
     desktop::user()?;
     crate::ui::init()?;
+    let message = setup_with(
+        store,
+        profile,
+        || {
+            let home = desktop::home()?;
+            let module = module(&home)?;
+            let inventory = discover(&home)?;
+            Ok((home, module, inventory))
+        },
+        crate::ui::choose,
+        |selected, module, home| {
+            crate::ui::work(
+                "Configurando os navegadores selecionados...",
+                move |progress| {
+                    let mut results = Vec::new();
+                    for target in selected {
+                        progress
+                            .send(format!("Configurando {}...", target.label))
+                            .context("Interface indisponível")?;
+                        let result = register(&target, &module, &home, true);
+                        results.push(match result {
+                            Ok(report) => format!(
+                                "{}: configurado; {} certificado(s) disponível(is).",
+                                target.label, report.certificate_count
+                            ),
+                            Err(error) => format!("{}: {}", target.label, error),
+                        });
+                    }
+                    Ok(results)
+                },
+            )
+        },
+    )?;
+    if let Some(message) = message {
+        crate::ui::message(&message);
+    }
+    Ok(())
+}
+
+// Keep the workflow under test while replacing only the graphical boundary.
+// Tests never need a real profile, user session, module or cloud account.
+fn setup_with(
+    store: &crate::storage::Store,
+    profile: Option<PathBuf>,
+    prepare: impl FnOnce() -> Result<(PathBuf, PathBuf, Inventory)>,
+    choose: impl FnOnce(&str, &[String]) -> Option<Vec<usize>>,
+    configure: impl FnOnce(Vec<Target>, PathBuf, PathBuf) -> Result<Vec<String>>,
+) -> Result<Option<String>> {
     ensure!(
         store.load_wallet_public().is_ok(),
         "Conecte sua conta e atualize os certificados antes de configurar os navegadores"
     );
-    let home = desktop::home()?;
-    let module = module(&home)?;
-    let inventory = discover(&home)?;
+    let (home, module, inventory) = prepare()?;
     let targets = if let Some(database) = profile {
         vec![Target {
             family: Family::Firefox,
@@ -676,8 +738,7 @@ pub fn setup_ui(store: &crate::storage::Store, profile: Option<PathBuf>) -> Resu
         inventory.targets
     };
     if targets.is_empty() {
-        crate::ui::message(&inventory.notices.join("\n"));
-        return Ok(());
+        return Ok(Some(inventory.notices.join("\n")));
     }
     let mut text = String::from(
         "Feche os navegadores antes de continuar. Selecione onde deseja disponibilizar seus certificados.\nO Axia configura os navegadores instalados; nenhum navegador será instalado.",
@@ -687,43 +748,211 @@ pub fn setup_ui(store: &crate::storage::Store, profile: Option<PathBuf>) -> Resu
         text.push_str(&notice);
     }
     let choices: Vec<_> = targets.iter().map(|target| target.label.clone()).collect();
-    let Some(selected) = crate::ui::choose(&text, &choices) else {
-        return Ok(());
+    let Some(selected) = choose(&text, &choices) else {
+        return Ok(None);
     };
     let selected: Vec<_> = selected
         .into_iter()
         .map(|index| targets[index].clone())
         .collect();
-    let results = crate::ui::work(
-        "Configurando os navegadores selecionados...",
-        move |progress| {
-            let mut results = Vec::new();
-            for target in selected {
-                progress
-                    .send(format!("Configurando {}...", target.label))
-                    .context("Interface indisponível")?;
-                let result = register(&target, &module, &home, true);
-                results.push(match result {
-                    Ok(report) => format!(
-                        "{}: configurado; {} certificado(s) disponível(is).",
-                        target.label, report.certificate_count
-                    ),
-                    Err(error) => format!("{}: {}", target.label, error),
-                });
-            }
-            Ok(results)
-        },
-    )?;
-    crate::ui::message(&format!(
+    let results = configure(selected, module, home)?;
+    Ok(Some(format!(
         "{}\n\nReabra os navegadores configurados e escolha a entrada com certificado digital no serviço desejado.",
         results.join("\n\n")
-    ));
-    Ok(())
+    )))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn multiple_firefox_install_defaults_require_explicit_selection() {
+        let temporary = tempfile::tempdir().unwrap();
+        let home = temporary.path();
+        let config = home.join("config");
+        let root = config.join("mozilla/firefox");
+        let bin = home.join("bin");
+        fs::create_dir_all(root.join("first")).unwrap();
+        fs::create_dir(root.join("second")).unwrap();
+        fs::create_dir(&bin).unwrap();
+        fs::write(bin.join("firefox"), b"laboratory browser").unwrap();
+        fs::write(
+            root.join("profiles.ini"),
+            "[InstallA]\nDefault=first\n[InstallB]\nDefault=second\n",
+        )
+        .unwrap();
+        let inventory = discover_at(home, &config, &home.join("data"), &bin).unwrap();
+        assert_eq!(inventory.targets.len(), 2);
+        assert!(
+            inventory
+                .firefox_target()
+                .unwrap_err()
+                .to_string()
+                .contains("explicitamente")
+        );
+    }
+
+    #[test]
+    fn browser_setup_without_account_never_prepares_or_registers_a_profile() {
+        let temporary = tempfile::tempdir().unwrap();
+        let state = temporary.path().join("must-not-exist");
+        let store = crate::storage::Store::new(state.clone()).unwrap();
+        let error = setup_with(
+            &store,
+            None,
+            || panic!("must not inspect a browser without an account"),
+            |_, _| panic!("must not ask to register a browser"),
+            |_, _, _| panic!("must not register a browser"),
+        )
+        .unwrap_err();
+        assert!(error.to_string().contains("Conecte sua conta"));
+        assert!(!state.exists());
+    }
+
+    #[test]
+    fn cancelled_browser_setup_preserves_profile_and_never_registers() {
+        let temporary = tempfile::tempdir().unwrap();
+        let home = temporary.path();
+        let store = crate::storage::Store::new(home.join("identity")).unwrap();
+        let mut config = store
+            .initialize("https://example.invalid", "laboratory")
+            .unwrap();
+        config.desktop_code = Some("lab-code".into());
+        store.save_registration(&config).unwrap();
+        let fixture: serde_json::Value = serde_json::from_str(include_str!(
+            "../../desktopid-client/tests/fixtures/python-vectors.json"
+        ))
+        .unwrap();
+        store
+            .save_wallet(&[crate::client::WalletCertificate {
+                key_name: "LAB-SERIAL;LAB-ISSUER".into(),
+                certificate: openssl::x509::X509::from_pem(
+                    fixture["certificate_pem"].as_str().unwrap().as_bytes(),
+                )
+                .unwrap(),
+            }])
+            .unwrap();
+        let profile = home.join("profile");
+        fs::create_dir(&profile).unwrap();
+        for name in FILES {
+            fs::write(profile.join(name), b"preserve laboratory profile").unwrap();
+        }
+        let identity = fs::read(store.path().join("identity.pem")).unwrap();
+        let wallet = fs::read(store.path().join("wallet.json")).unwrap();
+        let result = setup_with(
+            &store,
+            Some(profile.clone()),
+            || {
+                Ok((
+                    home.to_owned(),
+                    home.join("unused-module.so"),
+                    Inventory {
+                        installed: vec!["Firefox".into()],
+                        targets: Vec::new(),
+                        notices: Vec::new(),
+                    },
+                ))
+            },
+            |_, choices| {
+                assert_eq!(choices, &["Firefox"]);
+                None
+            },
+            |_, _, _| panic!("cancel must not enter NSS or register a module"),
+        )
+        .unwrap();
+        assert!(result.is_none());
+        for name in FILES {
+            assert_eq!(
+                fs::read(profile.join(name)).unwrap(),
+                b"preserve laboratory profile"
+            );
+        }
+        assert_eq!(
+            fs::read(store.path().join("identity.pem")).unwrap(),
+            identity
+        );
+        assert_eq!(fs::read(store.path().join("wallet.json")).unwrap(), wallet);
+        assert!(!home.join(".local/state").exists());
+    }
+
+    #[test]
+    fn firefox_profile_lock_held_by_another_process_is_preserved() {
+        use std::io::{BufRead, Read, Write};
+        use std::process::{Command, Stdio};
+        const CHILD_PROFILE: &str = "AXIA_TEST_FIREFOX_LOCK_PROFILE";
+        if let Some(profile) = std::env::var_os(CHILD_PROFILE) {
+            // Independent browser-style fcntl lock, not the production helper.
+            let file = OpenOptions::new()
+                .write(true)
+                .create(true)
+                .truncate(false)
+                .open(Path::new(&profile).join(".parentlock"))
+                .unwrap();
+            let mut lock = libc::flock {
+                l_type: libc::F_WRLCK as _,
+                l_whence: libc::SEEK_SET as _,
+                l_start: 0,
+                l_len: 0,
+                l_pid: 0,
+            };
+            assert_ne!(
+                unsafe { libc::fcntl(file.as_raw_fd(), libc::F_SETLK, &mut lock) },
+                -1
+            );
+            println!("AXIA_FIREFOX_LOCK_READY");
+            std::io::stdout().flush().unwrap();
+            std::io::stdin().read_exact(&mut [0]).unwrap();
+            drop(file);
+            return;
+        }
+        struct Holder(std::process::Child);
+        impl Drop for Holder {
+            fn drop(&mut self) {
+                let _ = self.0.kill();
+                let _ = self.0.wait();
+            }
+        }
+        let temporary = tempfile::tempdir().unwrap();
+        let profile = temporary.path();
+        let mut child = Holder(
+            Command::new(std::env::current_exe().unwrap())
+                .args([
+                    "--exact",
+                    "browsers::tests::firefox_profile_lock_held_by_another_process_is_preserved",
+                    "--nocapture",
+                ])
+                .env(CHILD_PROFILE, profile)
+                .stdin(Stdio::piped())
+                .stdout(Stdio::piped())
+                .stderr(Stdio::inherit())
+                .spawn()
+                .unwrap(),
+        );
+        let output = child.0.stdout.take().unwrap();
+        let (ready, receiver) = std::sync::mpsc::channel();
+        let output_reader = std::thread::spawn(move || {
+            for line in std::io::BufReader::new(output)
+                .lines()
+                .map_while(std::result::Result::ok)
+            {
+                if line.ends_with("AXIA_FIREFOX_LOCK_READY") {
+                    let _ = ready.send(());
+                }
+            }
+        });
+        receiver
+            .recv_timeout(std::time::Duration::from_secs(10))
+            .unwrap();
+        let error = profile_lock(profile, Family::Firefox).unwrap_err();
+        assert!(error.to_string().contains("em uso"));
+        assert!(child.0.try_wait().unwrap().is_none());
+        child.0.stdin.take().unwrap().write_all(b"x").unwrap();
+        assert!(child.0.wait().unwrap().success());
+        output_reader.join().unwrap();
+        let _lock = profile_lock(profile, Family::Firefox).unwrap();
+        assert!(profile.join(".parentlock").is_file());
+    }
     #[test]
     fn discovery_detects_both_families_and_respects_existing_chromium_database() {
         let temporary = tempfile::tempdir().unwrap();

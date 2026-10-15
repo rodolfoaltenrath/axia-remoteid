@@ -427,18 +427,7 @@ fn run(cli: Cli) -> Result<()> {
                 database,
                 create: false,
             },
-            None => {
-                let targets: Vec<_> = axia_desktop::browsers::discover(&home)?
-                    .targets
-                    .into_iter()
-                    .filter(|target| target.family == axia_desktop::browsers::Family::Firefox)
-                    .collect();
-                ensure!(
-                    targets.len() == 1,
-                    "Escolha um perfil Firefox explicitamente"
-                );
-                targets.into_iter().next().context("Perfil ausente")?
-            }
+            None => axia_desktop::browsers::discover(&home)?.firefox_target()?,
         };
         println!(
             "{}",
@@ -917,6 +906,7 @@ fn run(cli: Cli) -> Result<()> {
 }
 
 fn main() {
+    axia_desktop::installation::runtime::retain_marker();
     let cli = Cli::parse();
     let graphical = cli.command.as_ref().is_none_or(|command| {
         matches!(

@@ -22,17 +22,17 @@ pub fn paths(
     state: Option<PathBuf>,
 ) -> Result<(PathBuf, PathBuf, PathBuf)> {
     let home = PathBuf::from(env::var_os("HOME").context("HOME ausente")?);
-    let module = module.unwrap_or_else(|| {
-        let system = PathBuf::from("/usr/lib64/axia-remotedid/libdesktopid_pkcs11.so");
-        if desktopid_client::installation::protected_system_file(&system) {
-            system
-        } else {
-            home.join(".local/lib/desktopid-linux/libdesktopid_pkcs11.so")
-        }
-    });
+    let runtime = if module.is_none() || helper.is_none() {
+        Some(desktopid_client::installation::runtime::select(&home)?)
+    } else {
+        None
+    };
+    let module = module
+        .or_else(|| runtime.as_ref().map(|runtime| runtime.module.clone()))
+        .context("Módulo ausente")?;
     let helper = helper
-        .or_else(|| desktopid_client::installation::system_helper().map(Path::to_path_buf))
-        .unwrap_or_else(|| home.join(".local/libexec/desktopid-linux/desktopid-client"));
+        .or_else(|| runtime.map(|runtime| runtime.helper))
+        .context("Auxiliar ausente")?;
     let state = state
         .or_else(|| env::var_os("DESKTOPID_STATE_DIR").map(PathBuf::from))
         .unwrap_or_else(|| {
@@ -42,6 +42,27 @@ pub fn paths(
                 .join("desktopid-linux")
         });
     Ok((module, helper, state))
+}
+
+/// An explicit read-only inventory never needs an installed signing helper.
+pub fn inventory_paths(
+    module: Option<PathBuf>,
+    state: Option<PathBuf>,
+) -> Result<(PathBuf, PathBuf)> {
+    let home = PathBuf::from(env::var_os("HOME").context("HOME ausente")?);
+    let module = match module {
+        Some(module) => module,
+        None => desktopid_client::installation::runtime::select(&home)?.module,
+    };
+    let state = state
+        .or_else(|| env::var_os("DESKTOPID_STATE_DIR").map(PathBuf::from))
+        .unwrap_or_else(|| {
+            env::var_os("XDG_CONFIG_HOME")
+                .map(PathBuf::from)
+                .unwrap_or_else(|| home.join(".config"))
+                .join("desktopid-linux")
+        });
+    Ok((module, state))
 }
 
 pub fn run(module: &Path, helper: &Path, state: &Path, number: usize) -> Result<()> {
@@ -158,4 +179,18 @@ pub fn run(module: &Path, helper: &Path, state: &Path, number: usize) -> Result<
     println!("Assinatura real via PKCS11/OpenSC aceita e verificada no Linux.");
     println!("Artefatos privados salvos em {}", directory.display());
     Ok(())
+}
+
+#[cfg(test)]
+mod runtime_tests {
+    use super::*;
+    #[test]
+    fn explicit_inventory_does_not_require_a_default_module_or_signing_helper() {
+        let temporary = tempfile::tempdir().unwrap();
+        let module = temporary.path().join("laboratory-provider.so");
+        let state = temporary.path().join("laboratory-state");
+        let selected = inventory_paths(Some(module.clone()), Some(state.clone())).unwrap();
+        assert_eq!(selected, (module, state));
+        assert!(fs::read_dir(temporary.path()).unwrap().next().is_none());
+    }
 }

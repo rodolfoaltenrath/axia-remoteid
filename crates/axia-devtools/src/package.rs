@@ -19,6 +19,7 @@ const DOCUMENTS: &[&str] = &[
     "docs/TESTING.md",
     "docs/DEVELOPMENT.md",
     "docs/PROTOCOL.md",
+    "docs/FIX_01_RUNTIME.md",
     "CONTINUIDADE_IA_FEDORA.md",
     "LICENSE",
     "NOTICE",
@@ -123,6 +124,10 @@ fn runtime_entries(root: &Path, target: &Path) -> Result<BTreeMap<String, Vec<u8
                 && matches!(u16::from_le_bytes([data[16], data[17]]), 2 | 3)
                 && u16::from_le_bytes([data[18], data[19]]) == 62,
             "Esperado ELF x86_64 nativo: {name}"
+        );
+        ensure!(
+            desktopid_client::installation::runtime::native_bytes(&data),
+            "Artefato antigo ou incompatível com o runtime nativo atual: {name}"
         );
         entries.insert((*name).into(), data);
     }
@@ -324,6 +329,7 @@ mod tests {
         elf[..6].copy_from_slice(b"\x7fELF\x02\x01");
         elf[16] = 3;
         elf[18] = 62;
+        elf.extend_from_slice(desktopid_client::installation::runtime::MARKER);
         for name in BINARIES {
             fs::write(target.join(name), &elf)?;
         }
@@ -367,6 +373,21 @@ mod tests {
                 & 0o777,
             0o700
         );
+        Ok(())
+    }
+
+    #[test]
+    fn legacy_module_is_rejected_before_replacing_a_runtime_archive() -> Result<()> {
+        let target = tempfile::tempdir()?;
+        artifacts(target.path())?;
+        let output = tempfile::tempdir()?;
+        let archive = output.path().join("existing.tar.gz");
+        fs::write(&archive, b"preserve previous package")?;
+        let path = target.path().join("libdesktopid_pkcs11.so");
+        let data = fs::read(&path)?;
+        fs::write(path, &data[..64])?;
+        assert!(linux(&project(), target.path(), &archive).is_err());
+        assert_eq!(fs::read(archive)?, b"preserve previous package");
         Ok(())
     }
 
