@@ -9,14 +9,12 @@ jobs:
     timeout-minutes: 30
     steps:
       - name: Install build and test dependencies
-        run: dnf install -y git cargo rust gcc openssl-devel gtk4-devel clippy rustfmt python3 python3-cryptography dbus-daemon opensc nss rpm-build desktop-file-utils util-linux
+        run: dnf install -y git cargo rust gcc openssl-devel gtk4-devel clippy rustfmt dbus-daemon opensc nss rpm-build desktop-file-utils util-linux
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
       - name: Check publication contents
         run: cargo xtask check-publication
-      - name: Independent Python reference tests
-        run: python3 -m unittest discover -s tests -v
       - name: Rust checks
         run: sh scripts/test_rust_wsl.sh
       - name: Silent startup and tray menu tests
@@ -41,3 +39,15 @@ jobs:
           runuser -u rpm-test -- /usr/bin/axia-remotedid --version
           dnf remove -y axia-remotedid
           /tmp/axia-devtools-lab --root "$PWD" rpm-runtime-smoke --check-preserved /home/rpm-test
+  python-reference:
+    runs-on: ubuntu-latest
+    container: registry.fedoraproject.org/fedora:44
+    timeout-minutes: 10
+    steps:
+      - name: Install independent reference test dependencies
+        run: dnf install -y git python3 python3-cryptography
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - name: Independent Python reference tests
+        run: python3 -m unittest discover -s tests -v

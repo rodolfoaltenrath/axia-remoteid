@@ -6,7 +6,7 @@ Este pacote contém o aplicativo compilado para **Fedora 44 x86_64**, com interf
 
 A alpha.2 está em teste local e ainda não substitui o download público da alpha.1. Seu RPM se chama `axia-remotedid-0.1.0-0.2.alpha2.fc44.x86_64.rpm`.
 
-Essa versão usa um painel nativo e não exige Python ou Zenity. Não instala Firefox nem Chromium: detecta os navegadores nativos já presentes e oferece **Configurar navegadores**, permitindo selecionar Firefox, a família Chromium ou ambos. As bibliotecas necessárias do Fedora são resolvidas pelo RPM.
+Essa versão usa um painel nativo e não executa Python ou Zenity. Não instala Firefox nem Chromium: detecta os navegadores nativos já presentes e oferece **Configurar navegadores**, permitindo selecionar Firefox, a família Chromium ou ambos. As bibliotecas necessárias do Fedora são resolvidas pelo RPM; GTK/GStreamer podem trazer Python indiretamente para ferramentas do sistema.
 
 Depois de instalar, abra **Axia RemotedID Alpha**, conecte ou atualize a conta e clique em **Configurar navegadores**, com os navegadores escolhidos fechados. O registro mantém backup e preserva módulos de outros aplicativos. No primeiro uso, escolha se deseja iniciar com o sistema; os próximos logins ficam somente na bandeja. Fechar a interface mantém a bandeja ativa.
 
@@ -92,4 +92,4 @@ Informe a versão do Fedora, a versão e a forma de instalação do Firefox, o s
 
 O projeto é independente e não é um produto oficial da Certisign. Para detalhes técnicos, consulte o [guia de desenvolvimento](DEVELOPMENT.md).
 
-O aplicativo não executa Python ou Zenity. No Fedora 44, GTK depende de GStreamer, cujo pacote exige Python para ferramentas próprias; o gerenciador pode instalar esse interpretador indiretamente. Isso é uma dependência do toolkit do sistema, e não uma rotina Python do Axia. Não desativar nem remover o Python do sistema na máquina do usuário; a indisponibilidade do interpretador é testada somente em contêiner descartável.
+Na alpha.2, o aplicativo não executa Python ou Zenity. A alpha.1 publicada ainda usa ambos. No Fedora 44, GTK depende de GStreamer, cujo pacote exige Python para ferramentas próprias; o gerenciador pode instalar esse interpretador indiretamente. Isso é uma dependência do toolkit do sistema, e não uma rotina Python da alpha.2. Não desativar nem remover o Python do sistema na máquina do usuário; a indisponibilidade do interpretador é testada somente em contêiner descartável.

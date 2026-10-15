@@ -9,9 +9,8 @@ Para instalar o pacote pré-compilado sem ferramentas de desenvolvimento, siga o
 Use Rust/Cargo compatível com o workspace (mínimo declarado 1.88; validação realizada com 1.98.1), GTK 4 e OpenSSL de desenvolvimento. Empacotamento, diagnóstico e testes de integração são ferramentas Rust. Python permanece somente nas regressões independentes em `tests/`, com as implementações de referência em `tests/reference`. Os comandos abaixo usam os pacotes do Fedora:
 
 ```bash
-sudo dnf install rust cargo gcc openssl-devel gtk4-devel clippy rustfmt python3 python3-cryptography dbus-daemon opensc
+sudo dnf install rust cargo gcc openssl-devel gtk4-devel clippy rustfmt dbus-daemon opensc
 export CARGO_TARGET_DIR="$HOME/.cache/desktopid-rust-target"
-python3 -m unittest discover -s tests -v
 sh scripts/test_rust_wsl.sh
 sh scripts/test_pkcs11_wsl.sh
 cargo xtask check-publication
@@ -20,6 +19,15 @@ cargo build --release --workspace --locked
 ```
 
 Os testes usam dados sintéticos e servidor local; não entram na conta nem solicitam assinaturas reais. Os scripts terminados em `_wsl.sh` também funcionam diretamente no Fedora nativo. A janela de autorização é GTK nativa e exige uma sessão gráfica. Nenhum interpretador é usado pelo aplicativo instalado. O mínimo Rust declarado ainda precisa de validação separada.
+
+A suíte independente de referência é separada da compilação, do runtime e das ferramentas de integração Rust. Para executá-la também:
+
+```bash
+sudo dnf install python3 python3-cryptography
+python3 -m unittest discover -s tests -v
+```
+
+`requirements-test.txt` atende somente essa suíte. Na CI, ela roda no job `python-reference`; o job Fedora de compilação, empacotamento e integração não solicita esses pacotes diretamente. As bibliotecas GTK/GStreamer do Fedora ainda podem instalar Python indiretamente.
 
 O instalador grava a biblioteca em `~/.local/lib/desktopid-linux/libdesktopid_pkcs11.so` e o auxiliar em `~/.local/libexec/desktopid-linux/desktopid-client`. Não registra automaticamente o módulo no navegador ou em p11-kit. A configuração dos navegadores é uma ação posterior do usuário, pelo painel nativo.
 
@@ -103,6 +111,8 @@ cargo xtask package-rpm --target dist/fedora --container
 O RPM e seu checksum ficam em `dist/`, ignorados pelo Git. O pacote declara as dependências de execução, instala o comando em `/usr/bin/axia-remotedid`, o auxiliar em `/usr/libexec/axia-remotedid` e o módulo em `/usr/lib64/axia-remotedid`. A validação dos caminhos do sistema exige propriedade root, permissões protegidas e ausência de links simbólicos nos componentes.
 
 A integração NSS ocorre na sessão do usuário, pela interface gráfica, com o Firefox fechado. Nenhum script de instalação ou remoção do RPM modifica perfis ou estados de contas. A migração do módulo legado para o módulo do RPM exige ação do usuário, mantém backup e tenta restaurar o módulo anterior se a troca falhar. O atalho do sistema usa um ID próprio; a primeira abertura oculta somente os atalhos legados reconhecidos do projeto e atualiza seu próprio alias, preservando arquivos de terceiros e os dados da identidade.
+
+A seleção automática de executável RPM exige auxiliar e lançador protegidos, com o mesmo inode ELF da alpha.2. A instalação nativa por usuário não redireciona GUI, bandeja, autostart ou auxiliar para o wrapper shell/Python do RPM alpha.1 caso ambos estejam presentes.
 
 ## Usar a conta e testar uma assinatura
 

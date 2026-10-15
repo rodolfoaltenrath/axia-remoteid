@@ -8,7 +8,7 @@ param(
 $ErrorActionPreference = 'Stop'
 $wslCommand = Get-Command wsl.exe -CommandType Application | Select-Object -First 1
 if ($Prepare) {
-    & $wslCommand.Source --distribution $Distro --user root --exec dnf install -y cargo rust gcc openssl-devel clippy rustfmt python3 python3-cryptography
+    & $wslCommand.Source --distribution $Distro --user root --exec dnf install -y cargo rust gcc openssl-devel gtk4-devel clippy rustfmt
     if ($LASTEXITCODE -ne 0) { throw 'Could not prepare Rust development packages in Fedora WSL' }
 }
 $script = Join-Path $PSScriptRoot 'test_rust_wsl.sh'

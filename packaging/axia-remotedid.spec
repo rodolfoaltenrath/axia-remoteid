@@ -25,7 +25,7 @@ Recommends:     (gnome-shell-extension-appindicator if gnome-shell)
 Axia RemotedID connects Certisign cloud certificates to compatible Linux
 applications. This alpha provides graphical account connection, certificate
 authorization and discovery of installed native Firefox/Chromium browsers.
-All application operations are compiled Rust; no Python or Zenity is needed.
+All application operations are compiled Rust and invoke no Python or Zenity.
 Each user connects their own
 account. Browser setup runs in the user's session, never during RPM installation.
 
@@ -59,6 +59,6 @@ desktop-file-validate %{buildroot}%{_datadir}/applications/axia-remotedid.deskto
 %changelog
 * Wed Oct 14 2026 Axia RemotedID contributors - 0.1.0-0.2.alpha2
 - Compile desktop, browser setup, installation and authorization UI in Rust.
-- Detect installed browsers without installing Firefox, Python or Zenity.
+- Detect installed browsers without a direct Python, Zenity or browser requirement.
 * Tue Oct 13 2026 Axia RemotedID contributors - 0.1.0-0.1.alpha1
 - Initial Fedora 44 alpha with desktop application and user-session Firefox setup.

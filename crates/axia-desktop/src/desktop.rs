@@ -191,7 +191,7 @@ pub fn install(target: &Path, home: &Path) -> Result<PathBuf> {
 /// Hide only our exact legacy entries after a protected system install exists.
 pub fn migrate_shortcuts(home: &Path) -> Result<()> {
     let system = Path::new("/usr/bin/axia-remotedid");
-    if !crate::installation::protected_system_file(system) {
+    if crate::installation::system_helper().is_none() {
         return Ok(());
     }
     let legacy = home.join(".local/libexec/desktopid-linux/desktopid-client");

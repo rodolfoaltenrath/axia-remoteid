@@ -1,1 +1,2 @@
+# Only the independent Python reference suite in tests/; not a runtime/build dependency.
 cryptography>=50.0,<51

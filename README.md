@@ -8,7 +8,7 @@ O Axia RemotedID conecta certificados em nuvem da Certisign a aplicações Linux
 
 A solução atende profissionais e organizações que precisam acessar serviços com certificado digital em um ambiente Linux. A versão atual está em **fase alpha**, com foco no Fedora e no Firefox nativo.
 
-A próxima alpha traz uma interface nativa e configuração dos navegadores já instalados, sem exigir Python ou Zenity e sem instalar navegador junto. A versão pública para download continua sendo a **alpha.1**; as novidades da **alpha.2** estão em validação.
+A próxima alpha traz uma interface nativa e configuração dos navegadores já instalados, sem executar Python ou Zenity e sem instalar navegador junto. A versão pública para download continua sendo a **alpha.1**; as novidades da **alpha.2** estão em validação.
 
 ## Principais recursos
 

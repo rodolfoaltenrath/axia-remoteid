@@ -142,8 +142,7 @@ fn gui_command(store: &Store, root: &Path) -> Result<Command> {
     let launcher = Path::new("/usr/bin/axia-remotedid");
     // Preserve RPM frontend operations (including Firefox setup) for its
     // default state; custom state directories are handled by the native CLI.
-    if store.path() == root.join("desktopid-linux") && installation::protected_system_file(launcher)
-    {
+    if store.path() == root.join("desktopid-linux") && installation::system_helper().is_some() {
         let mut command = Command::new(launcher);
         command.arg("gui");
         Ok(command)
