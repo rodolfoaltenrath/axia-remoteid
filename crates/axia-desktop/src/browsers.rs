@@ -20,6 +20,8 @@ use std::{
     sync::Mutex,
 };
 
+mod chromium;
+
 pub const MODULE_NAME: &str = "DesktopID Linux Alpha";
 pub use crate::installation::runtime::SYSTEM_MODULE;
 const FILES: [&str; 3] = ["pkcs11.txt", "cert9.db", "key4.db"];
@@ -166,24 +168,16 @@ fn discover_at(home: &Path, config: &Path, data: &Path, bin: &Path) -> Result<In
             create: false,
         }));
     }
-    let chromium: Vec<&str> = [
-        ("Chromium", &["chromium", "chromium-browser"][..]),
-        (
-            "Google Chrome",
-            &["google-chrome", "google-chrome-stable"][..],
-        ),
-        ("Brave", &["brave-browser", "brave-browser-stable"][..]),
-        (
-            "Microsoft Edge",
-            &["microsoft-edge", "microsoft-edge-stable"][..],
-        ),
-        ("Vivaldi", &["vivaldi", "vivaldi-stable"][..]),
-        ("Opera", &["opera"][..]),
-    ]
-    .into_iter()
-    .filter(|(_, commands)| commands.iter().any(|command| bin.join(command).is_file()))
-    .map(|(name, _)| name)
-    .collect();
+    let chromium: Vec<&str> = chromium::BROWSERS
+        .iter()
+        .filter(|browser| {
+            browser
+                .commands
+                .iter()
+                .any(|command| bin.join(command).is_file())
+        })
+        .map(|browser| browser.name)
+        .collect();
     installed.extend(chromium.iter().map(|name| (*name).to_owned()));
     if !chromium.is_empty() {
         let legacy = home.join(".pki/nssdb");
@@ -267,49 +261,7 @@ pub fn registered_library(database: &Path) -> Result<Option<PathBuf>> {
     Ok(found)
 }
 
-fn chromium_running() -> Result<bool> {
-    for item in fs::read_dir("/proc")? {
-        let path = item?.path();
-        if !path
-            .file_name()
-            .is_some_and(|name| name.as_encoded_bytes().iter().all(u8::is_ascii_digit))
-            || !fs::metadata(&path)
-                .is_ok_and(|metadata| metadata.uid() == unsafe { libc::geteuid() })
-        {
-            continue;
-        }
-        if let Ok(bytes) = fs::read(path.join("cmdline")) {
-            let command = bytes.split(|byte| *byte == 0).next().unwrap_or_default();
-            let name = Path::new(std::ffi::OsStr::from_bytes(command))
-                .file_name()
-                .unwrap_or_default()
-                .as_encoded_bytes();
-            if matches!(
-                name,
-                b"chrome"
-                    | b"chromium"
-                    | b"chromium-browser"
-                    | b"brave"
-                    | b"brave-browser"
-                    | b"msedge"
-                    | b"microsoft-edge"
-                    | b"vivaldi-bin"
-                    | b"opera"
-            ) {
-                return Ok(true);
-            }
-        }
-    }
-    Ok(false)
-}
-
 fn profile_lock(database: &Path, family: Family) -> Result<File> {
-    if family == Family::Chromium {
-        ensure!(
-            !chromium_running()?,
-            "Feche os navegadores baseados em Chromium antes de configurar os certificados"
-        );
-    }
     let file = OpenOptions::new()
         .read(true)
         .write(true)
@@ -334,7 +286,8 @@ fn profile_lock(database: &Path, family: Family) -> Result<File> {
         l_len: 0,
         l_pid: 0,
     };
-    // Use Firefox's exact fcntl lock (flock is a different locking protocol).
+    // Firefox uses this exact fcntl lock. For Chromium this coordinates Axia
+    // instances only: Chromium does not honor .axia-integration.lock.
     ensure!(
         unsafe { libc::fcntl(file.as_raw_fd(), libc::F_SETLK, &mut lock) } != -1,
         "Feche o navegador: a base de certificados está em uso"
@@ -550,6 +503,39 @@ pub fn register(
     home: &Path,
     migrate: bool,
 ) -> Result<Registration> {
+    register_with(target, module, home, migrate, chromium::running)
+}
+
+fn require_closed(family: Family, running: &mut impl FnMut() -> Result<bool>) -> Result<()> {
+    if family == Family::Chromium {
+        ensure!(
+            !running()?,
+            "Feche os navegadores baseados em Chromium antes de configurar os certificados"
+        );
+    }
+    Ok(())
+}
+
+fn restore_closed(
+    database: &Path,
+    backup: &Path,
+    family: Family,
+    running: &mut impl FnMut() -> Result<bool>,
+) -> Result<()> {
+    require_closed(family, running).context(
+        "Restauração automática suspensa: feche os navegadores; o backup privado foi preservado",
+    )?;
+    restore(database, backup)
+        .context("Não foi possível restaurar a configuração; o backup privado foi preservado")
+}
+
+fn register_with(
+    target: &Target,
+    module: &Path,
+    home: &Path,
+    migrate: bool,
+    mut running: impl FnMut() -> Result<bool>,
+) -> Result<Registration> {
     let home = home.canonicalize()?;
     let system = module == Path::new(SYSTEM_MODULE);
     if system {
@@ -573,6 +559,8 @@ pub fn register(
             .any(|byte| matches!(byte, b'\n' | b'\r' | 0)),
         "Caminho do módulo inválido"
     );
+    // Check before even creating a new shared database directory or lock file.
+    require_closed(target.family, &mut running)?;
     if target.create {
         ensure!(
             target.family == Family::Chromium
@@ -616,14 +604,12 @@ pub fn register(
     } else {
         None
     };
+    // Refuse before NSS_InitReadWrite: NSS initialization can write files too.
+    // No restore is needed here because we have not opened NSS yet.
+    require_closed(target.family, &mut running)?;
     let operation = (|| {
         let mut nss = Database::open(&database)?;
-        if target.family == Family::Chromium {
-            ensure!(
-                !chromium_running()?,
-                "Feche os navegadores baseados em Chromium antes de configurar os certificados"
-            );
-        }
+        require_closed(target.family, &mut running)?;
         if migrated {
             nss.remove()?;
             nss.add(module)?;
@@ -639,6 +625,7 @@ pub fn register(
             "NSS não salvou o caminho do módulo"
         );
         if target.create {
+            require_closed(target.family, &mut running)?;
             for name in FILES {
                 fs::set_permissions(database.join(name), fs::Permissions::from_mode(0o600))?;
             }
@@ -648,14 +635,19 @@ pub fn register(
     let count = match operation {
         Ok(count) => count,
         Err(error) => {
-            if let Some(ref backup) = backup
-                && restore(&database, backup).is_err()
-            {
-                return Err(error.context(
-                    "Não foi possível restaurar a configuração; o backup privado foi preservado",
-                ));
+            if let Some(ref backup) = backup {
+                if let Err(restore_error) =
+                    restore_closed(&database, backup, target.family, &mut running)
+                {
+                    return Err(error.context(restore_error));
+                }
+                return Err(
+                    error.context("Configuração não concluída; a base anterior foi preservada")
+                );
             }
-            return Err(error.context("Configuração não concluída; a base anterior foi preservada"));
+            return Err(error.context(
+                "Configuração não concluída; feche os navegadores antes de tentar novamente",
+            ));
         }
     };
     Ok(Registration {
@@ -670,6 +662,10 @@ pub fn register(
         remote_signature_requested: false,
     })
 }
+
+#[cfg(test)]
+#[path = "browsers/browser_guard_tests.rs"]
+mod browser_guard_tests;
 
 pub fn setup_ui(store: &crate::storage::Store, profile: Option<PathBuf>) -> Result<()> {
     desktop::user()?;
