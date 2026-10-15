@@ -295,6 +295,7 @@ mod tests {
     #[ignore = "requires isolated graphical display"]
     fn native_forms_clear_passwords_cancel_timeout_and_keep_worker_responsive() {
         init().unwrap();
+        crate::gui::connection_tests::exercise_connection_recovery();
         if unsafe { libc::geteuid() } == 0 {
             let temporary = tempfile::tempdir().unwrap();
             let state = temporary.path().join("must-not-create-root-account");

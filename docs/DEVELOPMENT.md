@@ -53,6 +53,8 @@ Para mudar a escolha pelo terminal, use `~/.local/bin/axia-remotedid autostart -
 
 Ao iniciar sem argumentos ou com `gui`, o cliente abre um painel GTK com estado local, **Conectar conta**/**Atualizar certificados** e **Configurar navegadores**. Login e autorização usam campos nativos com buffer de senha protegido e opção de exibir o texto. As operações lentas executam em workers, mantendo a interface responsiva. Cancelar o formulário não cria identidade nem acessa a conta; uma falha de cadastro não provoca repetição automática. O comando `pkcs11-broker` conserva o protocolo e a sessão somente em memória.
 
+O painel relê o cadastro salvo antes de escolher a ação de conexão e após sucesso, erro ou cancelamento. Se o cadastro já foi confirmado e a consulta da carteira falha, passa a oferecer **Atualizar certificados** na mesma janela, sem novo login ou cadastro. **Configurar navegadores** depende de uma carteira local validada; uma carteira válida anterior permanece disponível se uma atualização falhar. Tentativas de cadastro com resultado desconhecido continuam bloqueadas, e erro na leitura da identidade não autoriza cadastrar outra vez. Detalhes e testes em [correção 3: recuperação da conexão](FIX_03_CONNECTION.md).
+
 Os comandos de terminal continuam disponíveis em `./dist/fedora/axia-remotedid --help`. `login-check` testa apenas login; `connect` cadastra uma vez. `setup-browsers --list` detecta os navegadores locais sem alterar suas bases. Nenhum navegador é instalado pelo RPM.
 
 Para validar os arquivos gerados com dados sintéticos:

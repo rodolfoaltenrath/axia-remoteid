@@ -52,25 +52,95 @@ fn error_message(error: &anyhow::Error) -> String {
     }
 }
 
-fn local_status(store: &Store) -> String {
-    if !store.path().exists() {
-        return "Conecte sua conta para disponibilizar os certificados.".into();
+struct ConnectionState {
+    registered: bool,
+    certificate_count: Option<usize>,
+    identity_exists: bool,
+}
+
+impl ConnectionState {
+    fn read(store: &Store) -> Result<Self> {
+        let identity_exists = store.path().try_exists()?;
+        let registered = identity_exists && store.load()?.0.desktop_code.is_some();
+        let certificate_count = if registered {
+            store.load_wallet_public().ok().map(|wallet| wallet.len())
+        } else {
+            None
+        };
+        Ok(Self {
+            registered,
+            certificate_count,
+            identity_exists,
+        })
     }
-    match store.load() {
-        Ok((config, _)) if config.desktop_code.is_some() => {
-            let count = store
-                .load_wallet_public()
-                .map(|wallet| wallet.len())
-                .unwrap_or_default();
-            format!(
-                "Computador cadastrado. Certificados salvos: {count}.\nAtualize os certificados ou configure os navegadores instalados."
-            )
+
+    fn connect_label(&self) -> &'static str {
+        if self.registered {
+            "Atualizar certificados"
+        } else {
+            "Conectar conta"
         }
-        Ok(_) => "A identidade local está salva; o cadastro ainda não foi confirmado.".into(),
-        Err(error) => format!(
-            "Não foi possível consultar o estado local: {}",
-            error_message(&error)
-        ),
+    }
+
+    fn status(&self) -> String {
+        match (self.registered, self.certificate_count) {
+            (true, Some(count)) => format!(
+                "Computador cadastrado. Certificados salvos: {count}.\nAtualize os certificados ou configure os navegadores instalados."
+            ),
+            (true, None) => "Computador cadastrado. Atualize os certificados para disponibilizá-los e configurar os navegadores.".into(),
+            (false, _) if self.identity_exists => "A identidade local está salva; o cadastro ainda não foi confirmado.".into(),
+            (false, _) => "Conecte sua conta para disponibilizar os certificados.".into(),
+        }
+    }
+}
+
+fn connection_action(store: &Store, prompt: impl FnOnce(bool) -> Result<Action>) -> Result<Action> {
+    // Read again at the time of the click. Never decide to register using a
+    // flag from before a worker persisted the registration code.
+    let state = ConnectionState::read(store)?;
+    if state.identity_exists && !state.registered {
+        store.ensure_registration_available()?;
+    }
+    prompt(state.registered)
+}
+
+fn complete_connection(
+    store: &Store,
+    result: Result<Option<ConnectionSummary>>,
+    connect: &gtk::Button,
+    browsers: &gtk::Button,
+    status: &gtk::Label,
+) {
+    // The worker may have saved a registration even when its final result is
+    // an error. Refresh controls after success, error and cancellation alike.
+    let state = match ConnectionState::read(store) {
+        Ok(state) => state,
+        Err(error) => {
+            connect.set_sensitive(false);
+            browsers.set_sensitive(false);
+            let operation = result
+                .err()
+                .map(|error| format!("{}\n\n", error_message(&error)))
+                .unwrap_or_default();
+            status.set_text(&format!(
+                "{operation}Não foi possível consultar o estado local: {}",
+                error_message(&error)
+            ));
+            return;
+        }
+    };
+    connect.set_label(state.connect_label());
+    connect.set_sensitive(true);
+    browsers.set_sensitive(state.certificate_count.is_some());
+    match result {
+        Ok(Some(summary)) => status.set_text(&format!("{}\n{}\nCertificados disponíveis: {}. Compatíveis com assinatura: {}.\nConfigure os navegadores para usar seus certificados.", if summary.registered_now { "Conta conectada e computador cadastrado." } else { "Cadastro existente reutilizado." }, if summary.wallet_updated { "Certificados atualizados." } else { "A carteira já está atualizada." }, summary.certificate_count, summary.compatible_count)),
+        Ok(None) => status.set_text(&state.status()),
+        Err(error) => {
+            let recovery = if state.registered {
+                "\n\nO cadastro deste computador está salvo. Clique em “Atualizar certificados” para consultar novamente, sem novo cadastro."
+            } else { "" };
+            status.set_text(&format!("{}{recovery}", error_message(&error)));
+        }
     }
 }
 
@@ -94,9 +164,7 @@ pub fn run(store: &Store) -> Result<()> {
     if let Err(error) = crate::tray::start_background(store) {
         eprintln!("Não foi possível iniciar a bandeja: {error}");
     }
-    let registered = Rc::new(Cell::new(
-        store.path().exists() && store.load()?.0.desktop_code.is_some(),
-    ));
+    let state = ConnectionState::read(store)?;
     let busy = Rc::new(Cell::new(false));
     let window = gtk::Window::builder()
         .title("Axia RemotedID — Certificados em nuvem")
@@ -112,19 +180,15 @@ pub fn run(store: &Store) -> Result<()> {
     title.add_css_class("title-1");
     title.set_xalign(0.0);
     area.append(&title);
-    let status = gtk::Label::new(Some(&local_status(store)));
+    let status = gtk::Label::new(Some(&state.status()));
     status.set_wrap(true);
     status.set_xalign(0.0);
     area.append(&status);
-    let connect = gtk::Button::with_label(if registered.get() {
-        "Atualizar certificados"
-    } else {
-        "Conectar conta"
-    });
+    let connect = gtk::Button::with_label(state.connect_label());
     connect.add_css_class("suggested-action");
     area.append(&connect);
     let browsers = gtk::Button::with_label("Configurar navegadores");
-    browsers.set_sensitive(store.path().join("wallet.json").is_file());
+    browsers.set_sensitive(state.certificate_count.is_some());
     area.append(&browsers);
     if crate::browsers::module(&home).is_err() {
         let install = gtk::Button::with_label("Instalar para este usuário");
@@ -158,36 +222,54 @@ pub fn run(store: &Store) -> Result<()> {
     let close_window = window.clone();
     close.connect_clicked(move |_| close_window.close());
     let root = store.path().to_owned();
-    let registered_action = registered.clone();
     let busy_action = busy.clone();
     let area_action = area.clone();
     let status_action = status.clone();
     let browsers_action = browsers.clone();
     connect.connect_clicked(move |button| {
-        if busy_action.replace(true) { return; }
+        if busy_action.replace(true) {
+            return;
+        }
         area_action.set_sensitive(false);
         let result: Result<Option<ConnectionSummary>> = (|| {
             let store = Store::new(root.clone())?;
-            if store.path().exists() && !registered_action.get() { store.ensure_registration_available()?; }
-            let action = prompt_action(registered_action.get())?;
-            if matches!(action, Action::Cancel) { return Ok(None); }
+            let action = connection_action(&store, prompt_action)?;
+            if matches!(action, Action::Cancel) {
+                return Ok(None);
+            }
             let root = root.clone();
             crate::ui::work("Conectando sua conta...", move |progress| {
                 let store = Store::new(root)?;
-                let server = if store.path().exists() { store.load()?.0.server } else { DEFAULT_SERVER.into() };
+                let server = if store.path().exists() {
+                    store.load()?.0.server
+                } else {
+                    DEFAULT_SERVER.into()
+                };
                 let api = Api::new(&server)?;
-                connect_with(&api, &store, |_| Ok(action), |text| { progress.send(text.to_owned()).context("Interface indisponível") })
+                connect_with(
+                    &api,
+                    &store,
+                    |_| Ok(action),
+                    |text| {
+                        progress
+                            .send(text.to_owned())
+                            .context("Interface indisponível")
+                    },
+                )
             })
         })();
-        match result {
-            Ok(Some(summary)) => {
-                registered_action.set(true); button.set_label("Atualizar certificados"); browsers_action.set_sensitive(true);
-                status_action.set_text(&format!("{}\n{}\nCertificados disponíveis: {}. Compatíveis com assinatura: {}.\nConfigure os navegadores para usar seus certificados.", if summary.registered_now { "Conta conectada e computador cadastrado." } else { "Cadastro existente reutilizado." }, if summary.wallet_updated { "Certificados atualizados." } else { "A carteira já está atualizada." }, summary.certificate_count, summary.compatible_count));
+        match Store::new(root.clone()) {
+            Ok(store) => {
+                complete_connection(&store, result, button, &browsers_action, &status_action)
             }
-            Ok(None) => {}
-            Err(error) => status_action.set_text(&error_message(&error)),
+            Err(error) => {
+                button.set_sensitive(false);
+                browsers_action.set_sensitive(false);
+                status_action.set_text(&error_message(&error));
+            }
         }
-        area_action.set_sensitive(true); busy_action.set(false);
+        area_action.set_sensitive(true);
+        busy_action.set(false);
     });
     let root = store.path().to_owned();
     let busy_action = busy.clone();
@@ -230,3 +312,7 @@ pub fn run_startup(store: &Store) -> Result<()> {
     }
     crate::tray::run(store)
 }
+
+#[cfg(test)]
+#[path = "gui/connection_tests.rs"]
+pub(crate) mod connection_tests;

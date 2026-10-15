@@ -21,6 +21,7 @@ const DOCUMENTS: &[&str] = &[
     "docs/PROTOCOL.md",
     "docs/FIX_01_RUNTIME.md",
     "docs/FIX_02_CHROMIUM.md",
+    "docs/FIX_03_CONNECTION.md",
     "CONTINUIDADE_IA_FEDORA.md",
     "LICENSE",
     "NOTICE",

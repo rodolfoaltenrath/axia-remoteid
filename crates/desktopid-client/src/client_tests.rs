@@ -319,6 +319,88 @@ fn gui_registers_once_and_refreshes_cached_wallet_without_another_login() {
 }
 
 #[test]
+fn gui_wallet_failure_after_saved_registration_recovers_without_login_or_registration() {
+    let fixture: Value =
+        serde_json::from_str(include_str!("../tests/fixtures/python-vectors.json")).unwrap();
+    let certificate =
+        X509::from_pem(fixture["certificate_pem"].as_str().unwrap().as_bytes()).unwrap();
+    let (api, server) = mock(vec![
+        response(json!({"id":"lab-user","organizacaoId":"lab-org","token":"lab-token"})),
+        response(json!({"codigoDesktop":"lab-desktop"})),
+        Response {
+            status: 500,
+            body: json!({"message":"lab-password"}),
+            extra_header: None,
+        },
+        Response {
+            status: 503,
+            body: Value::Null,
+            extra_header: None,
+        },
+        response(
+            json!({"certificados":[{"keyName":"SERIAL;ISSUER", "base64":STANDARD.encode(certificate.to_der().unwrap())}]}),
+        ),
+    ]);
+    let temporary = tempfile::tempdir().unwrap();
+    let store = crate::storage::Store::new(temporary.path().join("identity")).unwrap();
+    let error = crate::gui::connect_with(&api, &store, |_| Ok(gui_credentials()), |_| Ok(()))
+        .err()
+        .unwrap();
+    assert!(error.to_string().contains("O cadastro está salvo"));
+    assert!(!format!("{error:#}").contains("lab-password"));
+    assert_eq!(
+        store.load().unwrap().0.desktop_code.as_deref(),
+        Some("lab-desktop")
+    );
+    assert!(store.ensure_registration_available().is_err());
+    let identity = std::fs::read(store.path().join("identity.pem")).unwrap();
+    let journal = std::fs::read(store.path().join("registration.json")).unwrap();
+    assert!(!store.path().join("wallet.json").exists());
+    for succeeds in [false, true] {
+        let result = crate::gui::connect_with(
+            &api,
+            &store,
+            |registered| {
+                assert!(registered);
+                Ok(crate::gui::Action::Refresh)
+            },
+            |_| Ok(()),
+        );
+        if succeeds {
+            let summary = result.unwrap().unwrap();
+            assert!(!summary.registered_now);
+            assert!(summary.wallet_updated);
+            assert_eq!(summary.certificate_count, 1);
+            assert_eq!(store.load_wallet_public().unwrap().len(), 1);
+        } else {
+            assert!(result.is_err());
+            assert!(!store.path().join("wallet.json").exists());
+        }
+        assert_eq!(
+            std::fs::read(store.path().join("identity.pem")).unwrap(),
+            identity
+        );
+        assert_eq!(
+            std::fs::read(store.path().join("registration.json")).unwrap(),
+            journal
+        );
+    }
+    let requests = server.join().unwrap();
+    assert_eq!(requests.len(), 5);
+    assert_eq!(requests[0].path, "/api/manager/usuarios/login/usrsenha");
+    for request in &requests[2..] {
+        assert_eq!(request.path, "/api/manager/desktopid/lab-desktop/carteira");
+    }
+    assert_eq!(
+        requests
+            .iter()
+            .filter(|request| request.path == requests[1].path)
+            .count(),
+        1
+    );
+}
+
+#[test]
 fn gui_failed_login_creates_no_identity_or_registration_attempt() {
     for status in [401, 500] {
         let (api, server) = mock(vec![Response {
