@@ -1,8 +1,14 @@
 # Continuidade do Axia RemotedID
 
-**Retomada atual — 15/10/2026:** as seis correções foram commitadas até `cbdef29`, a alpha.2 foi publicada sobre `19da049` e a correção dos perfis não inicializados foi commitada pelo usuário em `562f4e2`. O usuário solicitou novamente retirar a instalação e publicar um novo instalável; a versão desta preparação é **alpha.3**, incluindo essa correção. README e guia apontam para `v0.1.0-alpha.3`; confirme a release no GitHub ao retomar. Não reinstalar automaticamente: o usuário fará o download e a configuração manual. Critérios originais em [CONTINUAR_CORRECOES_NAVEGADORES.md](docs/CONTINUAR_CORRECOES_NAVEGADORES.md).
+**Retomada atual — 16/10/2026:** a alpha.3 foi publicada sobre `04fcb43`, incluindo a correção de perfis não inicializados de `562f4e2`. O usuário pediu simplificar a janela de senha/código e mover as explicações de privacidade para **Sobre**. Essas alterações estão locais, sem commit ou nova release; o RPM alpha.3 publicado não contém a nova janela Sobre. Não reinstalar, limpar a conta ou substituir assets por conta própria. Critérios originais dos navegadores em [CONTINUAR_CORRECOES_NAVEGADORES.md](docs/CONTINUAR_CORRECOES_NAVEGADORES.md).
 
-Estado atualizado em 15/10/2026, após concluir o ponto 6. Leia este arquivo, o [README](README.md), a [referência do protocolo](docs/PROTOCOL.md) e o código atual antes de propor alterações. Este documento substitui o antigo diário de investigação.
+Estado atualizado em 16/10/2026, após simplificar a autorização e incluir Sobre. Leia este arquivo, o [README](README.md), a [referência do protocolo](docs/PROTOCOL.md) e o código atual antes de propor alterações. Este documento substitui o antigo diário de investigação.
+
+## Autorização simplificada e janela Sobre
+
+O diálogo de autorização agora mostra somente o certificado e uma linha de contexto; na sessão reutilizável, conserva a informação de até dez minutos no mesmo aplicativo. O campo de código passou a usar “Código temporário do Certisign”, sem sigla técnica. O aviso sobre não gravar senha/código e a explicação do token em memória ficam em uma janela Sobre, acessível no rodapé do painel principal, com versão, licença e link do projeto. Não houve alteração do fluxo de login, autorização remota, cache, cancelamento ou armazenamento.
+
+Os testes existentes de credenciais permanecem, e o GTK em display privado também exercita o botão Sobre, a relação com o painel, fechamento e reabertura. Logs locais ignorados usam `test-results/authorization-ui-*`. As alterações aguardam commit pelo usuário e uma futura decisão de distribuição; a versão do workspace permanece alpha.3 nesta revisão de fontes.
 
 ## Correção após teste manual — perfis Firefox sem base inicializada
 

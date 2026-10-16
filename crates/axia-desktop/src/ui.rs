@@ -398,6 +398,7 @@ mod tests {
         );
         crate::gui::connection_tests::exercise_connection_recovery();
         crate::gui::browser_panel::tests::exercise_browser_results();
+        crate::gui::about::exercise_about();
         if unsafe { libc::geteuid() } == 0 {
             let temporary = tempfile::tempdir().unwrap();
             let state = temporary.path().join("must-not-create-root-account");

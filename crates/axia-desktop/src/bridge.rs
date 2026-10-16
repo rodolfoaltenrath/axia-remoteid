@@ -7,14 +7,11 @@ fn dialog(label: &str, cached: bool) -> Result<(Zeroizing<String>, Zeroizing<Str
         "Sessão gráfica indisponível; nenhuma autorização ou assinatura solicitada"
     );
     crate::ui::init()?;
-    let authorization = if cached {
-        "Esta autorização permitirá novas assinaturas com este certificado neste aplicativo por até 10 minutos.\nFechar o aplicativo encerra a autorização. Senha e código não serão guardados."
+    let text = if cached {
+        format!("Certificado: {label}\nAutorização por até 10 minutos neste aplicativo.")
     } else {
-        "Autorize somente se você iniciou essa operação."
+        format!("Certificado: {label}\nAutorize o uso deste certificado para continuar.")
     };
-    let text = format!(
-        "Um aplicativo deste computador solicitou uma assinatura digital.\nCertificado: {label}\n{authorization}"
-    );
     let fields = [
         crate::ui::Field {
             label: "Senha do aplicativo Certisign",
@@ -22,7 +19,7 @@ fn dialog(label: &str, cached: bool) -> Result<(Zeroizing<String>, Zeroizing<Str
             required: true,
         },
         crate::ui::Field {
-            label: "Código atual do aplicativo Certisign (OTP)",
+            label: "Código temporário do Certisign",
             secret: true,
             required: true,
         },

@@ -4,6 +4,7 @@ use desktopid_client::gui::{Action, ConnectionSummary, Credentials, connect_with
 use gtk::{glib, prelude::*};
 use std::{cell::Cell, rc::Rc};
 const DEFAULT_SERVER: &str = "https://remoteidcertisign.com.br";
+pub(crate) mod about;
 pub(crate) mod browser_panel;
 fn prompt_action(registered: bool) -> Result<Action> {
     if registered {
@@ -221,7 +222,11 @@ pub fn run(store: &Store) -> Result<()> {
         });
     }
     let close = gtk::Button::with_label("Fechar");
-    area.append(&close);
+    let footer = gtk::Box::new(gtk::Orientation::Horizontal, 12);
+    footer.set_homogeneous(true);
+    footer.append(&about::button(&window));
+    footer.append(&close);
+    area.append(&footer);
     let close_window = window.clone();
     close.connect_clicked(move |_| close_window.close());
     let root = store.path().to_owned();
