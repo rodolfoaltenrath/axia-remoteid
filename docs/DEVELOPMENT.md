@@ -2,7 +2,7 @@
 
 Guia técnico para preparar a versão alpha, instalar a integração com o Firefox e contribuir com o projeto. Para uma apresentação do produto, consulte o [README](../README.md). Os resultados de validação e o histórico técnico estão na [continuidade do projeto](../CONTINUIDADE_IA_FEDORA.md).
 
-Para instalar o pacote pré-compilado sem ferramentas de desenvolvimento, siga o [guia de testes da alpha](TESTING.md). A alpha.3 contém executáveis nativos, instruções e checksum, sem scripts de execução; as versões anteriores permanecem no histórico de releases. A build de distribuição atual destina-se ao Fedora 44 x86_64.
+Para instalar o pacote pré-compilado sem ferramentas de desenvolvimento, siga o [guia de testes da alpha](TESTING.md). A alpha.4 contém executáveis nativos, instruções e checksum, sem scripts de execução; as versões anteriores permanecem no histórico de releases. A build de distribuição atual destina-se ao Fedora 44 x86_64.
 
 ## Compilar e testar no Fedora
 
@@ -55,7 +55,7 @@ Para mudar a escolha pelo terminal, use `~/.local/bin/axia-remotedid autostart -
 
 Ao iniciar sem argumentos ou com `gui`, o cliente abre um painel GTK com estado local, **Conectar conta**/**Atualizar certificados** e **Configurar navegadores**. Login e autorização usam campos nativos com buffer de senha protegido e opção de exibir o texto. As operações lentas executam em workers, mantendo a interface responsiva. Cancelar o formulário não cria identidade nem acessa a conta; uma falha de cadastro não provoca repetição automática. O comando `pkcs11-broker` conserva o protocolo e a sessão somente em memória.
 
-**Revisão de interface posterior à alpha.3, ainda não publicada:** a janela de autorização foi reduzida ao certificado, aos campos de senha/código temporário e à duração de até dez minutos quando há sessão reutilizável. As explicações sobre armazenamento e cache foram movidas para **Sobre**, no rodapé do painel principal. Essa janela nativa mostra produto, versão, licença, página do projeto e os detalhes de privacidade. Não altera o protocolo, o prazo absoluto da sessão, o timeout de 180 segundos, o cancelamento ou os buffers protegidos. O teste GTK isolado verifica a abertura, fechamento e reabertura pelo botão, além do encerramento com o painel.
+**Revisão de interface incluída na alpha.4:** a janela de autorização foi reduzida ao certificado, aos campos de senha/código temporário e à duração de até dez minutos quando há sessão reutilizável. As explicações sobre armazenamento e cache foram movidas para **Sobre**, no rodapé do painel principal. Essa janela nativa mostra produto, versão, licença, página do projeto e os detalhes de privacidade. Não altera o protocolo, o prazo absoluto da sessão, o timeout de 180 segundos, o cancelamento ou os buffers protegidos. O teste GTK isolado verifica a abertura, fechamento e reabertura pelo botão, além do encerramento com o painel.
 
 O painel relê o cadastro salvo antes de escolher a ação de conexão e após sucesso, erro ou cancelamento. Se o cadastro já foi confirmado e a consulta da carteira falha, passa a oferecer **Atualizar certificados** na mesma janela, sem novo login ou cadastro. **Configurar navegadores** depende de uma carteira local validada; uma carteira válida anterior permanece disponível se uma atualização falhar. Tentativas de cadastro com resultado desconhecido continuam bloqueadas, e erro na leitura da identidade não autoriza cadastrar outra vez. Detalhes e testes em [correção 3: recuperação da conexão](FIX_03_CONNECTION.md).
 
@@ -172,7 +172,7 @@ Para gerar um pacote pequeno para outra máquina Linux:
 cargo xtask package-linux --target "$CARGO_TARGET_DIR/release"
 ```
 
-O arquivo em `dist/` inclui somente executáveis ELF, módulo, instruções, licença e manifesto de hashes. Depois de extrair a alpha.3, execute `./axia-remotedid install-user --target .` ou abra o painel e escolha **Instalar para este usuário**. Não inclui Python ou instaladores shell. Os binários são vinculados às bibliotecas do sistema de compilação; valide a compatibilidade no destino ou compile no próprio Fedora. A transferência de uma identidade registrada deve ser feita separadamente, de forma privada, corrigindo proprietário e permissões. Não coloque a identidade no pacote ou no GitHub.
+O arquivo em `dist/` inclui somente executáveis ELF, módulo, instruções, licença e manifesto de hashes. Depois de extrair a alpha.4, execute `./axia-remotedid install-user --target .` ou abra o painel e escolha **Instalar para este usuário**. Não inclui Python ou instaladores shell. Os binários são vinculados às bibliotecas do sistema de compilação; valide a compatibilidade no destino ou compile no próprio Fedora. A transferência de uma identidade registrada deve ser feita separadamente, de forma privada, corrigindo proprietário e permissões. Não coloque a identidade no pacote ou no GitHub.
 
 Antes de publicar, execute `cargo xtask check-publication` e revise os arquivos selecionados pelo Git. O verificador detecta formatos comuns de dados privados; não substitui essa revisão. Instaladores proprietários, extrações, Ghidra, downloads, compilações e relatórios gerados foram retirados da árvore de fontes ou ignorados. Não são necessários para compilar.
 

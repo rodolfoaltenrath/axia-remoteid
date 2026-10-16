@@ -4,7 +4,7 @@
 
 Name:           axia-remotedid
 Version:        0.1.0
-Release:        0.3.alpha3%{?dist}
+Release:        0.4.alpha4%{?dist}
 Summary:        Cloud digital certificates for Linux
 License:        Apache-2.0
 URL:            https://github.com/rodolfoaltenrath/axia-remoteid
@@ -57,6 +57,10 @@ desktop-file-validate %{buildroot}%{_datadir}/applications/axia-remotedid.deskto
 %{_datadir}/applications/axia-remotedid.desktop
 
 %changelog
+* Fri Oct 16 2026 Axia RemotedID contributors - 0.1.0-0.4.alpha4
+- Simplify certificate authorization and move privacy details to About.
+- Add native About dialog with version, license and project link.
+- Wait for laboratory process readiness before testing Chromium detection.
 * Thu Oct 15 2026 Axia RemotedID contributors - 0.1.0-0.3.alpha3
 - Exclude uninitialized Firefox and LibreWolf profiles from configuration.
 - Explain profile selection and preserve initialized secondary profiles.

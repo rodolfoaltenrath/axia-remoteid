@@ -1,10 +1,10 @@
-# Instalar e testar o Axia RemotedID Alpha 3
+# Instalar e testar o Axia RemotedID Alpha 4
 
 O Axia RemotedID conecta seus certificados em nuvem da Certisign a aplicações Linux compatíveis. Esta pré-versão é destinada ao **Fedora 44 x86_64**, com sessão gráfica. O pacote contém o aplicativo compilado; você não precisa instalar Rust nem executar scripts de desenvolvimento.
 
-**[Baixar o RPM](https://github.com/rodolfoaltenrath/axia-remoteid/releases/download/v0.1.0-alpha.3/axia-remotedid-0.1.0-0.3.alpha3.fc44.x86_64.rpm)** · **[Downloads e checksum](https://github.com/rodolfoaltenrath/axia-remoteid/releases/tag/v0.1.0-alpha.3)**
+**[Baixar o RPM](https://github.com/rodolfoaltenrath/axia-remoteid/releases/download/v0.1.0-alpha.4/axia-remotedid-0.1.0-0.4.alpha4.fc44.x86_64.rpm)** · **[Downloads e checksum](https://github.com/rodolfoaltenrath/axia-remoteid/releases/tag/v0.1.0-alpha.4)**
 
-A alpha.3 usa uma interface nativa, bandeja e configuração de navegadores com resultados por perfil. O aplicativo não executa Python ou Zenity. Não instala navegadores: identifica instalações nativas compatíveis já existentes. As bibliotecas do Fedora são instaladas automaticamente pelo gerenciador de pacotes.
+A alpha.4 usa uma interface nativa, bandeja e configuração de navegadores com resultados por perfil. O aplicativo não executa Python ou Zenity. Não instala navegadores: identifica instalações nativas compatíveis já existentes. As bibliotecas do Fedora são instaladas automaticamente pelo gerenciador de pacotes.
 
 ## Antes de começar
 
@@ -13,19 +13,19 @@ A alpha.3 usa uma interface nativa, bandeja e configuração de navegadores com 
 - Tenha uma conta Certisign com certificado em nuvem e acesso ao aplicativo que fornece seu código temporário.
 - Feche os navegadores antes de configurar a integração.
 
-Firefox foi confirmado em acesso real na versão anterior. Os testes automatizados da alpha.3 cobrem o novo fluxo local; o uso real desta versão ainda precisa de validação. LibreWolf, Chromium e seus derivados têm os limites descritos adiante.
+Firefox foi confirmado em acesso real na versão anterior. Os testes automatizados da alpha.4 cobrem o novo fluxo local; o uso real desta versão ainda precisa de validação. LibreWolf, Chromium e seus derivados têm os limites descritos adiante.
 
 ## Instalar o RPM
 
-1. Baixe o arquivo `axia-remotedid-0.1.0-0.3.alpha3.fc44.x86_64.rpm` na página de downloads.
+1. Baixe o arquivo `axia-remotedid-0.1.0-0.4.alpha4.fc44.x86_64.rpm` na página de downloads.
 2. Abra-o no instalador de aplicativos do Fedora e confirme a instalação com sua senha do sistema.
 3. Abra **Axia RemotedID Alpha** no menu de aplicativos, como seu usuário normal.
 
 O Fedora resolve as dependências necessárias. Se preferir instalar pelo terminal, baixe também o arquivo `.rpm.sha256`, entre na pasta dos downloads e execute:
 
 ```bash
-sha256sum -c axia-remotedid-0.1.0-0.3.alpha3.fc44.x86_64.rpm.sha256
-sudo dnf install ./axia-remotedid-0.1.0-0.3.alpha3.fc44.x86_64.rpm
+sha256sum -c axia-remotedid-0.1.0-0.4.alpha4.fc44.x86_64.rpm.sha256
+sudo dnf install ./axia-remotedid-0.1.0-0.4.alpha4.fc44.x86_64.rpm
 ```
 
 O RPM ainda não tem assinatura de distribuição. O checksum permite conferir se o arquivo corresponde ao publicado nesta release.
@@ -42,9 +42,11 @@ O RPM ainda não tem assinatura de distribuição. O checksum permite conferir s
 
 Os resultados de configuração ficam disponíveis enquanto o painel estiver aberto. Fechar a janela inicia uma nova lista na próxima abertura; os registros já feitos nos navegadores permanecem.
 
-**Perfis do mesmo navegador:** duas entradas Firefox representam dois perfis, não duas instalações. A alpha.3 oferece para configuração somente os perfis que já têm a base de certificados preparada. Um perfil vazio, como um `default` residual, recebe uma orientação para abri-lo uma vez no navegador e fechá-lo antes de configurar. Os perfis secundários já preparados continuam disponíveis. Selecione somente os perfis que deseja utilizar; não é necessário refazer o cadastro para mudar essa seleção.
+**Perfis do mesmo navegador:** duas entradas Firefox representam dois perfis, não duas instalações. A alpha.4 oferece para configuração somente os perfis que já têm a base de certificados preparada. Um perfil vazio, como um `default` residual, recebe uma orientação para abri-lo uma vez no navegador e fechá-lo antes de configurar. Os perfis secundários já preparados continuam disponíveis. Selecione somente os perfis que deseja utilizar; não é necessário refazer o cadastro para mudar essa seleção.
 
 Quando o serviço solicitar autorização, use a senha e o código temporário atual do aplicativo Certisign. O segundo fator do serviço acessado, como o Google Authenticator exigido pelo GERID, continua fazendo parte do fluxo desse serviço.
+
+A janela de autorização mostra o certificado e uma linha sobre a validade da sessão. Para consultar a versão, a licença e os detalhes sobre senhas, códigos e cache, abra **Sobre** no rodapé do painel principal.
 
 O aplicativo não precisa manter o painel aberto para o navegador usar a integração. Fechar o painel mantém a bandeja ativa. No GNOME, a extensão **AppIndicator and KStatusNotifierItem Support** permite exibir o ícone da bandeja.
 
@@ -77,12 +79,12 @@ Um teste totalmente limpo exige também retirar a integração anterior dos nave
 
 ## Alternativa: pacote compactado
 
-A release também oferece `axia-remotedid-0.1.0-alpha.3-fedora44-x86_64.tar.gz`. Essa alternativa instala somente no seu usuário e exige previamente as bibliotecas de execução:
+A release também oferece `axia-remotedid-0.1.0-alpha.4-fedora44-x86_64.tar.gz`. Essa alternativa instala somente no seu usuário e exige previamente as bibliotecas de execução:
 
 ```bash
 sudo dnf install gtk4 nss openssl-libs libgcc zlib ca-certificates
-sha256sum -c axia-remotedid-0.1.0-alpha.3-fedora44-x86_64.tar.gz.sha256
-tar -xzf axia-remotedid-0.1.0-alpha.3-fedora44-x86_64.tar.gz
+sha256sum -c axia-remotedid-0.1.0-alpha.4-fedora44-x86_64.tar.gz.sha256
+tar -xzf axia-remotedid-0.1.0-alpha.4-fedora44-x86_64.tar.gz
 cd axia-remotedid
 ./axia-remotedid
 ```

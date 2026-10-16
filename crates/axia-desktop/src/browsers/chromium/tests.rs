@@ -2,6 +2,7 @@ use super::*;
 use std::{
     os::unix::{fs::symlink, process::CommandExt},
     process::{Child, Command, Stdio},
+    time::{Duration, Instant},
 };
 
 #[test]
@@ -97,7 +98,7 @@ fn real_procfs_detects_stable_wrapper_alias_and_disguised_argv_via_executable() 
         (Path::new("/usr/bin/sleep"), "/usr/bin/google-chrome-stable"),
         (browser.as_path(), "unrelated-launcher"),
     ] {
-        let child = RunningChild(
+        let mut child = RunningChild(
             Command::new(binary)
                 .arg0(argv0)
                 .arg("30")
@@ -116,6 +117,30 @@ fn real_procfs_detects_stable_wrapper_alias_and_disguised_argv_via_executable() 
             proc.join(child.0.id().to_string()),
         )
         .unwrap();
+        // spawn() can return while procfs still exposes transient exec state.
+        // Wait using an independent oracle, then assert production detection
+        // once; retrying running_at() itself could conceal a detection defect.
+        let task = Path::new("/proc").join(child.0.id().to_string());
+        let executable = binary.canonicalize().unwrap();
+        let deadline = Instant::now() + Duration::from_secs(2);
+        loop {
+            let ready = fs::read_link(task.join("exe")).is_ok_and(|path| path == executable)
+                && fs::read(task.join("cmdline")).is_ok_and(|bytes| {
+                    bytes.split(|byte| *byte == 0).next() == Some(argv0.as_bytes())
+                });
+            if ready {
+                break;
+            }
+            assert!(
+                child.0.try_wait().unwrap().is_none(),
+                "laboratory process exited before readiness"
+            );
+            assert!(
+                Instant::now() < deadline,
+                "laboratory process never reached expected exec state"
+            );
+            std::thread::sleep(Duration::from_millis(5));
+        }
         assert!(running_at(&proc, unsafe { libc::geteuid() }).unwrap());
         drop(child);
         assert!(!running_at(&proc, unsafe { libc::geteuid() }).unwrap());

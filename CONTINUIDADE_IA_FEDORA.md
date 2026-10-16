@@ -1,6 +1,6 @@
 # Continuidade do Axia RemotedID
 
-**Retomada atual — 16/10/2026:** a alpha.3 foi publicada sobre `04fcb43`, incluindo a correção de perfis não inicializados de `562f4e2`. O usuário pediu simplificar a janela de senha/código e mover as explicações de privacidade para **Sobre**. Essas alterações estão locais, sem commit ou nova release; o RPM alpha.3 publicado não contém a nova janela Sobre. Não reinstalar, limpar a conta ou substituir assets por conta própria. Critérios originais dos navegadores em [CONTINUAR_CORRECOES_NAVEGADORES.md](docs/CONTINUAR_CORRECOES_NAVEGADORES.md).
+**Retomada atual — 16/10/2026:** a interface simplificada e a janela Sobre foram commitadas pelo usuário em `cd75ff5`, sobre a alpha.3 (`04fcb43`). O usuário autorizou gerar e publicar a **alpha.4**, com versionamento próprio e links atualizados no README e no guia. Confira a release `v0.1.0-alpha.4` no GitHub ao retomar. Esta solicitação é de distribuição: não limpar a instalação, dados da conta ou perfis reais, nem instalar automaticamente a versão nova. Critérios originais dos navegadores em [CONTINUAR_CORRECOES_NAVEGADORES.md](docs/CONTINUAR_CORRECOES_NAVEGADORES.md).
 
 Estado atualizado em 16/10/2026, após simplificar a autorização e incluir Sobre. Leia este arquivo, o [README](README.md), a [referência do protocolo](docs/PROTOCOL.md) e o código atual antes de propor alterações. Este documento substitui o antigo diário de investigação.
 
@@ -8,7 +8,13 @@ Estado atualizado em 16/10/2026, após simplificar a autorização e incluir Sob
 
 O diálogo de autorização agora mostra somente o certificado e uma linha de contexto; na sessão reutilizável, conserva a informação de até dez minutos no mesmo aplicativo. O campo de código passou a usar “Código temporário do Certisign”, sem sigla técnica. O aviso sobre não gravar senha/código e a explicação do token em memória ficam em uma janela Sobre, acessível no rodapé do painel principal, com versão, licença e link do projeto. Não houve alteração do fluxo de login, autorização remota, cache, cancelamento ou armazenamento.
 
-Os testes existentes de credenciais permanecem, e o GTK em display privado também exercita o botão Sobre, a relação com o painel, fechamento e reabertura. Logs locais ignorados usam `test-results/authorization-ui-*`. As alterações aguardam commit pelo usuário e uma futura decisão de distribuição; a versão do workspace permanece alpha.3 nesta revisão de fontes.
+Os testes existentes de credenciais permanecem, e o GTK em display privado também exercita o botão Sobre, a relação com o painel, fechamento e reabertura. Logs locais da implementação usam `test-results/authorization-ui-*`. O usuário fez o commit `cd75ff5` e autorizou a distribuição na alpha.4.
+
+## Preparação da alpha.4
+
+Workspace, lockfile, RPM e guia usam a alpha.4. Os assets anteriores permanecem no histórico. Logs e pacotes desta preparação ficam em `test-results/alpha4-*` e `dist/releases/v0.1.0-alpha.4`, ignorados pelo Git. Os testes usam dados sintéticos e Fedora descartável; nenhuma autenticação, assinatura ou alteração na instalação real faz parte desta publicação.
+
+A inspeção de uma falha intermitente da CI anterior encontrou o teste Chromium verificando procfs imediatamente após spawn, durante um estado transitório de exec. A regressão passou a aguardar `/proc/PID/exe` e `argv[0]` esperados por um oráculo independente, com limite de dois segundos e falha se o processo sair. Só depois chama a detecção de produção uma vez; não há repetição dessa função que possa esconder defeitos. A lógica de proteção Chromium não foi alterada.
 
 ## Correção após teste manual — perfis Firefox sem base inicializada
 
