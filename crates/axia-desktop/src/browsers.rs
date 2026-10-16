@@ -20,6 +20,7 @@ use std::{
 };
 
 mod chromium;
+mod discovery;
 mod firefox;
 
 pub const MODULE_NAME: &str = "DesktopID Linux Alpha";
@@ -53,6 +54,13 @@ pub enum FirefoxDefault {
 }
 
 #[derive(Clone, Debug, Serialize)]
+pub struct BrowserInstallation {
+    pub id: &'static str,
+    pub name: &'static str,
+    pub executables: Vec<PathBuf>,
+}
+
+#[derive(Clone, Debug, Serialize)]
 pub struct Target {
     pub family: Family,
     pub label: String,
@@ -60,6 +68,8 @@ pub struct Target {
     pub create: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub firefox_default: Option<FirefoxDefault>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub installations: Vec<BrowserInstallation>,
 }
 
 impl Target {
@@ -80,15 +90,27 @@ pub struct Inventory {
     pub installed: Vec<String>,
     pub targets: Vec<Target>,
     pub notices: Vec<String>,
+    #[serde(skip)]
+    ambiguous_firefox_profiles: bool,
 }
 
 impl Inventory {
     /// Never guess among multiple installation defaults.
     pub fn firefox_target(self) -> Result<Target> {
+        ensure!(
+            !self.ambiguous_firefox_profiles,
+            "Escolha um perfil Firefox explicitamente; há um perfil compartilhado com outro navegador"
+        );
         let mut targets: Vec<_> = self
             .targets
             .into_iter()
-            .filter(|target| target.family == Family::Firefox)
+            .filter(|target| {
+                target.family == Family::Firefox
+                    && target
+                        .installations
+                        .iter()
+                        .any(|installation| installation.id == "firefox")
+            })
             .collect();
         let default = [FirefoxDefault::Installation, FirefoxDefault::Profile]
             .into_iter()
@@ -114,29 +136,92 @@ fn absolute_environment(name: &str, default: PathBuf) -> Result<PathBuf> {
     Ok(path)
 }
 
+#[cfg(test)]
 fn discover_at(home: &Path, config: &Path, data: &Path, bin: &Path) -> Result<Inventory> {
+    discover_in(
+        home,
+        config,
+        data,
+        &discovery::Search {
+            bins: vec![bin.to_owned()],
+            desktops: Vec::new(),
+        },
+    )
+}
+
+#[cfg(test)]
+fn test_browser(path: &Path) {
+    fs::write(path, b"\x7fELFsynthetic browser; never executed").unwrap();
+    fs::set_permissions(path, fs::Permissions::from_mode(0o755)).unwrap();
+}
+
+fn discover_in(
+    home: &Path,
+    config: &Path,
+    data: &Path,
+    search: &discovery::Search,
+) -> Result<Inventory> {
     let mut installed = Vec::new();
     let mut targets = Vec::new();
     let mut notices = Vec::new();
-    if bin.join("firefox").is_file() {
-        installed.push("Firefox".into());
-        let profiles = firefox::targets(home, config)?;
+    for browser in firefox::BROWSERS {
+        let Some(installation) = discovery::find(
+            browser.id,
+            browser.name,
+            browser.commands,
+            browser.desktop_ids,
+            search,
+            &mut notices,
+        ) else {
+            continue;
+        };
+        installed.push(browser.name.into());
+        let profiles = firefox::targets(home, config, browser, &installation)?;
         if profiles.is_empty() {
-            notices.push("Abra e feche o Firefox uma vez para preparar o perfil.".into());
+            notices.push(format!(
+                "Abra e feche o {} uma vez para preparar o perfil.",
+                browser.name
+            ));
         }
         targets.extend(profiles);
     }
-    let chromium: Vec<&str> = chromium::BROWSERS
+    // A profile explicitly shared by products must not silently get the first
+    // product's identity, nor be offered twice for the same physical DB.
+    let mut owners = std::collections::BTreeMap::<PathBuf, std::collections::BTreeSet<&str>>::new();
+    for target in &targets {
+        for installation in &target.installations {
+            owners
+                .entry(target.database.clone())
+                .or_default()
+                .insert(installation.id);
+        }
+    }
+    let ambiguous_firefox_profiles = owners
+        .values()
+        .any(|products| products.len() > 1 && products.contains("firefox"));
+    let before = targets.len();
+    targets.retain(|target| owners[&target.database].len() == 1);
+    if targets.len() != before {
+        notices.push("Um perfil compartilhado entre navegadores diferentes foi omitido para evitar uma associação ambígua. Use um perfil próprio de cada navegador.".into());
+    }
+    let chromium: Vec<_> = chromium::BROWSERS
         .iter()
-        .filter(|browser| {
-            browser
-                .commands
-                .iter()
-                .any(|command| bin.join(command).is_file())
+        .filter_map(|browser| {
+            discovery::find(
+                browser.commands[0],
+                browser.name,
+                browser.commands,
+                browser.desktop_ids,
+                search,
+                &mut notices,
+            )
         })
-        .map(|browser| browser.name)
         .collect();
-    installed.extend(chromium.iter().map(|name| (*name).to_owned()));
+    installed.extend(
+        chromium
+            .iter()
+            .map(|installation| installation.name.to_owned()),
+    );
     if !chromium.is_empty() {
         let legacy = home.join(".pki/nssdb");
         let current = data.join("pki/nssdb");
@@ -154,14 +239,23 @@ fn discover_at(home: &Path, config: &Path, data: &Path, bin: &Path) -> Result<In
             .all(|name| !database.join(name).exists() && !database.join(name).is_symlink());
         targets.push(Target {
             family: Family::Chromium,
-            label: format!("{} — certificados compartilhados", chromium.join(", ")),
+            label: format!(
+                "{} — certificados compartilhados",
+                chromium
+                    .iter()
+                    .map(|installation| installation.name)
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ),
             database,
             create,
             firefox_default: None,
+            installations: chromium,
         });
     }
     for (name, id) in [
         ("Firefox", "org.mozilla.firefox"),
+        ("LibreWolf", "io.gitlab.librewolf-community"),
         ("Chromium", "org.chromium.Chromium"),
         ("Google Chrome", "com.google.Chrome"),
         ("Brave", "com.brave.Browser"),
@@ -180,6 +274,7 @@ fn discover_at(home: &Path, config: &Path, data: &Path, bin: &Path) -> Result<In
         installed,
         targets,
         notices,
+        ambiguous_firefox_profiles,
     })
 }
 
@@ -187,7 +282,12 @@ pub fn discover(home: &Path) -> Result<Inventory> {
     let home = home.canonicalize()?;
     let config = absolute_environment("XDG_CONFIG_HOME", home.join(".config"))?;
     let data = absolute_environment("XDG_DATA_HOME", home.join(".local/share"))?;
-    discover_at(&home, &config, &data, Path::new("/usr/bin"))
+    discover_in(
+        &home,
+        &config,
+        &data,
+        &discovery::Search::for_user(&home, &data),
+    )
 }
 
 pub fn module(home: &Path) -> Result<PathBuf> {
@@ -689,6 +789,7 @@ fn setup_with(
             database,
             create: false,
             firefox_default: None,
+            installations: Vec::new(),
         }]
     } else {
         inventory.targets
@@ -743,7 +844,7 @@ mod tests {
         fs::create_dir_all(root.join("first")).unwrap();
         fs::create_dir(root.join("second")).unwrap();
         fs::create_dir(&bin).unwrap();
-        fs::write(bin.join("firefox"), b"laboratory browser").unwrap();
+        test_browser(&bin.join("firefox"));
         fs::write(
             root.join("profiles.ini"),
             "[InstallA]\nDefault=first\n[InstallB]\nDefault=second\n",
@@ -830,6 +931,7 @@ mod tests {
                             installed: vec!["Firefox".into()],
                             targets: Vec::new(),
                             notices: Vec::new(),
+                            ambiguous_firefox_profiles: false,
                         },
                     ))
                 },
@@ -953,7 +1055,7 @@ mod tests {
         let bin = home.join("bin");
         fs::create_dir(&bin).unwrap();
         for name in ["firefox", "google-chrome", "brave-browser"] {
-            fs::write(bin.join(name), b"test").unwrap();
+            test_browser(&bin.join(name));
         }
         let firefox = config.join("mozilla/firefox");
         fs::create_dir_all(firefox.join("release")).unwrap();
@@ -966,6 +1068,7 @@ mod tests {
         assert_eq!(found.targets[0].database, firefox.join("release"));
         assert_eq!(found.targets[1].database, firefox.join("old"));
         assert_eq!(found.targets[2].database, data.join("pki/nssdb"));
+        assert_eq!(found.targets[2].installations.len(), 2);
         fs::create_dir_all(home.join(".pki/nssdb")).unwrap();
         assert_eq!(
             discover_at(home, &config, &data, &bin).unwrap().targets[2].database,

@@ -1,8 +1,16 @@
 # Continuidade do Axia RemotedID
 
-**Retomada atual — 15/10/2026:** os pontos 1 a 4 da revisão de navegadores estão implementados. O ponto 4 foi concluído sobre `29d9b60` e aguarda commit pelo usuário; o próximo é o ponto 5. As pendências 5 e 6, critérios de aceitação e fluxo de commits estão em [CONTINUAR_CORRECOES_NAVEGADORES.md](docs/CONTINUAR_CORRECOES_NAVEGADORES.md). Leia esse plano antes das próximas etapas históricas abaixo. O teste manual no Fedora GNOME continua previsto para depois dos seis pontos.
+**Retomada atual — 15/10/2026:** os pontos 1 a 5 da revisão de navegadores estão implementados. O ponto 4 foi commitado em `488ed1a`; o ponto 5 foi concluído sobre essa revisão e aguarda commit pelo usuário. O próximo é o ponto 6, cujos critérios e fluxo de commits estão em [CONTINUAR_CORRECOES_NAVEGADORES.md](docs/CONTINUAR_CORRECOES_NAVEGADORES.md). Leia esse plano antes das próximas etapas históricas abaixo. O teste manual no Fedora GNOME continua previsto para depois dos seis pontos.
 
-Estado atualizado em 15/10/2026, após concluir o ponto 4. Leia este arquivo, o [README](README.md), a [referência do protocolo](docs/PROTOCOL.md) e o código atual antes de propor alterações. Este documento substitui o antigo diário de investigação.
+Estado atualizado em 15/10/2026, após concluir o ponto 5. Leia este arquivo, o [README](README.md), a [referência do protocolo](docs/PROTOCOL.md) e o código atual antes de propor alterações. Este documento substitui o antigo diário de investigação.
+
+## Correção 5 — descoberta de navegadores nativos
+
+LibreWolf foi acrescentado ao catálogo Gecko, com perfis próprios e precedência da raiz legada conforme a documentação oficial. A descoberta procura comandos em PATH, nos diretórios conhecidos do usuário/sistema e em lançadores desktop reconhecidos, inclusive com executáveis fora de `/usr/bin`. Faz análise somente por leitura de ELF, wrappers e metadados; não executa comandos de desktop, shell ou navegador. Os aliases Chromium continuam compartilhados com a proteção de processos. O catálogo, as fontes primárias e os limites estão em [FIX_05_BROWSER_DISCOVERY.md](docs/FIX_05_BROWSER_DISCOVERY.md).
+
+Cada alvo descoberto inclui `installations`, identificando produtos e caminhos canônicos dos executáveis. Duplicatas não repetem perfis; referências compartilhadas por produtos diferentes são omitidas com aviso. `setup-firefox` sem perfil permanece restrito ao Firefox e exige escolha explícita quando um conflito afetar seu perfil. Flatpak, Snap e AppImage não recebem configuração da base do host. Zen e Floorp não foram acrescentados nesta entrega.
+
+Passaram 135 testes Rust comuns, incluindo 18 novas regressões de descoberta, e 20 verificações CLI, incluindo inventário real do executável com Firefox/LibreWolf sintéticos em HOME/XDG privados. O teste GTK revelou uma medição prematura de layout no prazo fixo de 50 ms; foi alterado para aguardar layout válido com prazo limitado, mantendo as exigências de rolagem e altura. Passou três vezes consecutivas, inclusive durante compilação release. Também passaram Firefox/NSS, Clippy com `-D warnings`, formatação, builds debug/release e identificação nativa dos dois ELF. Publicação: 93 fontes, nenhuma ocorrência. Logs em `test-results/fix05-*`, ignorados. Não houve conta real, instalação de navegador, alteração da instalação do usuário ou publicação de RPM. Falta o commit do ponto 5 pelo usuário antes do ponto 6.
 
 ## Correção 4 — perfis secundários do Firefox
 

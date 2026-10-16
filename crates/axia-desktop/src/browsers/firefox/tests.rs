@@ -10,7 +10,7 @@ fn fixture(ini: &str, directories: &[&str]) -> tempfile::TempDir {
     }
     fs::write(root.join("profiles.ini"), ini).unwrap();
     fs::create_dir(home.path().join("bin")).unwrap();
-    fs::write(home.path().join("bin/firefox"), b"synthetic browser").unwrap();
+    super::super::test_browser(&home.path().join("bin/firefox"));
     home
 }
 
@@ -31,7 +31,7 @@ fn installation_default_does_not_hide_general_default_or_secondary_profiles() {
         &["old", "main", "work"],
     );
     // A Chromium target must not affect selection of the Firefox default.
-    fs::write(home.path().join("bin/chromium"), b"synthetic browser").unwrap();
+    super::super::test_browser(&home.path().join("bin/chromium"));
     let inventory = discover(home.path());
     assert_eq!(inventory.targets.len(), 4);
     assert_eq!(

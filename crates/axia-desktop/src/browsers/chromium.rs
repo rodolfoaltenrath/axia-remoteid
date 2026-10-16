@@ -10,6 +10,7 @@ use std::{
 pub(super) struct Browser {
     pub name: &'static str,
     pub commands: &'static [&'static str],
+    pub desktop_ids: &'static [&'static str],
     executables: &'static [&'static str],
 }
 
@@ -19,36 +20,42 @@ pub(super) const BROWSERS: &[Browser] = &[
     Browser {
         name: "Chromium",
         commands: &["chromium", "chromium-browser"],
+        desktop_ids: &["org.chromium.Chromium.desktop"],
         executables: &["chrome"],
     },
     Browser {
         name: "Google Chrome",
         commands: &["google-chrome", "google-chrome-stable"],
+        desktop_ids: &["com.google.Chrome.desktop"],
         executables: &["chrome"],
     },
     Browser {
         name: "Brave",
         commands: &["brave-browser", "brave-browser-stable"],
+        desktop_ids: &["com.brave.Browser.desktop"],
         executables: &["brave"],
     },
     Browser {
         name: "Microsoft Edge",
         commands: &["microsoft-edge", "microsoft-edge-stable"],
+        desktop_ids: &[],
         executables: &["msedge"],
     },
     Browser {
         name: "Vivaldi",
         commands: &["vivaldi", "vivaldi-stable"],
+        desktop_ids: &[],
         executables: &["vivaldi-bin"],
     },
     Browser {
         name: "Opera",
         commands: &["opera"],
+        desktop_ids: &[],
         executables: &[],
     },
 ];
 
-fn known_name(path: &[u8]) -> bool {
+pub(super) fn known_name(path: &[u8]) -> bool {
     let name = Path::new(OsStr::from_bytes(path))
         .file_name()
         .unwrap_or_default()

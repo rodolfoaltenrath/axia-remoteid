@@ -1,6 +1,6 @@
 //! Enumerate existing profiles separately from selecting one CLI default.
 //! Default semantics: https://firefox-source-docs.mozilla.org/toolkit/profile/changes.html
-use super::{Family, FirefoxDefault, Target};
+use super::{BrowserInstallation, Family, FirefoxDefault, Target};
 use anyhow::Result;
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -14,6 +14,28 @@ struct Profile {
     installation_default: bool,
     profile_default: bool,
 }
+
+pub(super) struct Browser {
+    pub id: &'static str,
+    pub name: &'static str,
+    pub commands: &'static [&'static str],
+    pub desktop_ids: &'static [&'static str],
+}
+
+pub(super) const BROWSERS: &[Browser] = &[
+    Browser {
+        id: "firefox",
+        name: "Firefox",
+        commands: &["firefox"],
+        desktop_ids: &["org.mozilla.firefox.desktop"],
+    },
+    Browser {
+        id: "librewolf",
+        name: "LibreWolf",
+        commands: &["librewolf"],
+        desktop_ids: &["io.gitlab.librewolf-community.desktop"],
+    },
+];
 
 fn existing(path: &str, root: &Path, relative: bool) -> Result<Option<PathBuf>> {
     if path.trim().is_empty() || (!relative && !Path::new(path).is_absolute()) {
@@ -30,13 +52,30 @@ fn existing(path: &str, root: &Path, relative: bool) -> Result<Option<PathBuf>> 
     Ok(Some(path.canonicalize()?))
 }
 
-pub(super) fn targets(home: &Path, config: &Path) -> Result<Vec<Target>> {
+pub(super) fn targets(
+    home: &Path,
+    config: &Path,
+    browser: &Browser,
+    installation: &BrowserInstallation,
+) -> Result<Vec<Target>> {
     let mut roots = BTreeSet::new();
     let mut profiles: BTreeMap<PathBuf, Profile> = BTreeMap::new();
-    for root in [
-        config.join("mozilla/firefox"),
-        home.join(".mozilla/firefox"),
-    ] {
+    let profile_roots = if browser.id == "librewolf" {
+        // LibreWolf documents the legacy root taking precedence whenever it
+        // exists: https://librewolf.net/docs/faq/#how-do-i-migrate-to-the-new-xdg-paths
+        let legacy = home.join(".librewolf");
+        vec![if legacy.is_dir() {
+            legacy
+        } else {
+            config.join("librewolf/librewolf")
+        }]
+    } else {
+        vec![
+            config.join("mozilla/firefox"),
+            home.join(".mozilla/firefox"),
+        ]
+    };
+    for root in profile_roots {
         if !root.join("profiles.ini").is_file() {
             continue;
         }
@@ -96,12 +135,14 @@ pub(super) fn targets(home: &Path, config: &Path) -> Result<Vec<Target>> {
             Target {
                 family: Family::Firefox,
                 label: format!(
-                    "Firefox — {}{suffix}",
+                    "{} — {}{suffix}",
+                    browser.name,
                     profile.name.as_deref().unwrap_or("Perfil Firefox")
                 ),
                 database,
                 create: false,
                 firefox_default,
+                installations: vec![installation.clone()],
             }
         })
         .collect();

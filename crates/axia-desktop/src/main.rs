@@ -427,6 +427,7 @@ fn run(cli: Cli) -> Result<()> {
                 database,
                 create: false,
                 firefox_default: None,
+                installations: Vec::new(),
             },
             None => axia_desktop::browsers::discover(&home)?.firefox_target()?,
         };

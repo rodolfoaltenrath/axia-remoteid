@@ -1,9 +1,97 @@
 use crate::{lab, publication};
-use anyhow::{Result, ensure};
+use anyhow::{Context, Result, ensure};
 use base64::{Engine, engine::general_purpose::STANDARD};
 use openssl::x509::X509;
 use serde_json::{Value, json};
 use std::{fs, os::unix::fs::PermissionsExt, path::Path, time::Duration};
+
+fn browser_inventory(binary: &Path) -> Result<()> {
+    let temp = tempfile::Builder::new()
+        .prefix("axia-browser-inventory-")
+        .tempdir()?;
+    let home = temp.path();
+    let local_bin = home.join(".local/bin");
+    let desktop_dir = home.join(".local/share/applications");
+    let private_bin = home.join("opt/Libre Wolf");
+    for directory in [&local_bin, &desktop_dir, &private_bin] {
+        fs::create_dir_all(directory)?;
+    }
+    let firefox = local_bin.join("firefox");
+    lab::private_write(&firefox, b"\x7fELFsynthetic browser; never executed")?;
+    fs::set_permissions(&firefox, fs::Permissions::from_mode(0o755))?;
+    let librewolf = private_bin.join("librewolf");
+    let marker = home.join("must-not-execute-browser");
+    lab::private_write(
+        &librewolf,
+        format!(
+            "#!/bin/sh\nprintf ran > '{}'\nexec /native/librewolf \"$@\"\n",
+            marker.display()
+        )
+        .as_bytes(),
+    )?;
+    fs::set_permissions(&librewolf, fs::Permissions::from_mode(0o755))?;
+    let desktop = desktop_dir.join("librewolf.desktop");
+    let desktop_bytes = format!(
+        "[Desktop Entry]\nType=Application\nExec=\"{}\" %u\n",
+        librewolf.display()
+    );
+    lab::private_write(&desktop, desktop_bytes.as_bytes())?;
+    let ini = b"[Profile0]\nName=Principal\nPath=main\n[Profile1]\nName=Trabalho\nPath=work\n[InstallA]\nDefault=main\n";
+    for suffix in ["mozilla/firefox", "librewolf/librewolf"] {
+        let root = home.join(".config").join(suffix);
+        for profile in ["main", "work"] {
+            fs::create_dir_all(root.join(profile))?;
+        }
+        lab::private_write(&root.join("profiles.ini"), ini)?;
+    }
+    let state = home.join("must-not-create-account");
+    let output = lab::successful(
+        lab::command(binary, home)
+            .env("PATH", &local_bin)
+            .env("XDG_DATA_DIRS", home.join("system-data"))
+            .arg("--state-dir")
+            .arg(&state)
+            .args(["setup-browsers", "--list"]),
+    )?;
+    let data: Value = serde_json::from_slice(&output.stdout)?;
+    let targets = data["targets"]
+        .as_array()
+        .context("Inventário sem alvos JSON")?;
+    for (id, suffix) in [
+        ("firefox", "mozilla/firefox"),
+        ("librewolf", "librewolf/librewolf"),
+    ] {
+        let root = home.join(".config").join(suffix);
+        let owned: Vec<_> = targets
+            .iter()
+            .filter(|target| target["installations"][0]["id"] == id)
+            .collect();
+        ensure!(
+            owned.len() == 2,
+            "Inventário não separou os perfis de cada navegador"
+        );
+        for target in owned {
+            let database = Path::new(target["database"].as_str().context("Perfil sem caminho")?);
+            ensure!(
+                (database == root.join("main") || database == root.join("work"))
+                    && fs::read_dir(database)?.count() == 0,
+                "Inventário criou arquivos ou associou outro perfil"
+            );
+        }
+        ensure!(
+            fs::read(root.join("profiles.ini"))? == ini,
+            "Inventário alterou profiles.ini"
+        );
+    }
+    ensure!(
+        !state.exists()
+            && !marker.exists()
+            && !home.join(".pki").exists()
+            && fs::read(desktop)? == desktop_bytes.as_bytes(),
+        "Inventário executou navegador ou criou estado"
+    );
+    Ok(())
+}
 
 pub fn smoke(root: &Path, binary: &Path, report: &Path) -> Result<()> {
     let binary = binary.canonicalize()?;
@@ -62,6 +150,8 @@ pub fn smoke(root: &Path, binary: &Path, report: &Path) -> Result<()> {
         "Inventário de navegadores criou estado ou iniciou configuração"
     );
     checks.push("browser-inventory-without-display-account-state-or-profile-creation");
+    browser_inventory(&binary)?;
+    checks.push("native-firefox-and-librewolf-inventory-from-user-path-and-quoted-desktop-without-execution");
     run(&state, &init, true)?;
     let original = fs::read(state.join("identity.pem"))?;
     ensure!(

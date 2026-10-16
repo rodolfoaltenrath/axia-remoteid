@@ -372,15 +372,29 @@ mod tests {
         let close = form.window.clone();
         let bounded = Rc::new(Cell::new(false));
         let result = bounded.clone();
-        glib::timeout_add_local_once(Duration::from_millis(50), move || {
+        let dimensions = Rc::new(Cell::new((0, 0.0, 0.0)));
+        let measured = dimensions.clone();
+        let deadline = std::time::Instant::now() + Duration::from_secs(2);
+        glib::timeout_add_local(Duration::from_millis(10), move || {
             let adjustment = scroll.vadjustment();
-            result.set(adjustment.upper() > adjustment.page_size() && scroll.height() <= 360);
-            close.close();
+            measured.set((scroll.height(), adjustment.upper(), adjustment.page_size()));
+            let ready = scroll.height() > 0
+                && scroll.height() <= 360
+                && adjustment.upper() > adjustment.page_size()
+                && adjustment.page_size() > 0.0;
+            if ready || std::time::Instant::now() >= deadline {
+                result.set(ready);
+                close.close();
+                glib::ControlFlow::Break
+            } else {
+                glib::ControlFlow::Continue
+            }
         });
         assert!(form.wait(None).is_none());
         assert!(
             bounded.get(),
-            "Muitos perfis precisam rolar em uma área limitada"
+            "Muitos perfis precisam rolar em uma área limitada: {:?}",
+            dimensions.get()
         );
         crate::gui::connection_tests::exercise_connection_recovery();
         if unsafe { libc::geteuid() } == 0 {

@@ -1,6 +1,6 @@
-# Continuidade: concluir os pontos 5 e 6 dos navegadores
+# Continuidade: concluir o ponto 6 dos navegadores
 
-Atualizado em **15/10/2026**, depois de implementar o ponto 4 sobre `29d9b60`. O ponto 4 está pronto para revisão e commit pelo usuário. Este é o ponto de entrada para continuar a tarefa em outro computador. Leia também o código atual, os documentos das quatro correções e `DEVELOPMENT.md`. O documento geral `../CONTINUIDADE_IA_FEDORA.md` conserva histórico anterior; as prioridades desta tarefa estão aqui.
+Atualizado em **15/10/2026**, depois de implementar o ponto 5 sobre `488ed1a`. O ponto 5 está pronto para revisão e commit pelo usuário. Este é o ponto de entrada para continuar a tarefa em outro computador. Leia também o código atual, os documentos das cinco correções e `DEVELOPMENT.md`. O documento geral `../CONTINUIDADE_IA_FEDORA.md` conserva histórico anterior; as prioridades desta tarefa estão aqui.
 
 ## Combinado com o usuário
 
@@ -14,20 +14,20 @@ Atualizado em **15/10/2026**, depois de implementar o ponto 4 sobre `29d9b60`. O
 
 ## Estado confirmado ao escrever este documento
 
-O ponto 4 foi implementado sobre um diretório de trabalho limpo, depois do commit de conciliação `29d9b60`. Seu código e documentação ainda aguardam commit pelo usuário:
+O ponto 4 foi commitado e enviado em `488ed1a`. O ponto 5 começou com o diretório de trabalho limpo, sobre essa revisão, e seu código e documentação aguardam commit pelo usuário:
 
 | Ponto | Situação | Commit | Documento |
 | --- | --- | --- | --- |
 | 1. Seleção consistente do runtime nativo | Concluído | `39a3fac` | [FIX_01_RUNTIME.md](FIX_01_RUNTIME.md) |
 | 2. Chromium aberto e recuperação da base NSS | Concluído | `9e695c9` | [FIX_02_CHROMIUM.md](FIX_02_CHROMIUM.md) |
 | 3. Tela após cadastro salvo e consulta de carteira falha | Concluído | `b0667ca` | [FIX_03_CONNECTION.md](FIX_03_CONNECTION.md) |
-| 4. Perfis secundários Firefox | Implementado; aguardando commit | — | [FIX_04_FIREFOX_PROFILES.md](FIX_04_FIREFOX_PROFILES.md) |
-| 5. Derivados Firefox e executáveis fora de `/usr/bin` | **Próximo a implementar** | — | Especificação abaixo |
-| 6. Resultados por alvo no painel | Pendente | — | Especificação abaixo |
+| 4. Perfis secundários Firefox | Concluído | `488ed1a` | [FIX_04_FIREFOX_PROFILES.md](FIX_04_FIREFOX_PROFILES.md) |
+| 5. Derivados Firefox e executáveis fora de `/usr/bin` | Implementado; aguardando commit | — | [FIX_05_BROWSER_DISCOVERY.md](FIX_05_BROWSER_DISCOVERY.md) |
+| 6. Resultados por alvo no painel | **Próximo a implementar** | — | Especificação abaixo |
 
 A migração dos testes Python para Rust também está no histórico atual. Não recriar a suíte Python. O fixture público `python-vectors.json` é intencional e permanece como referência sintética; não alterar seu conteúdo nem relaxar a exceção de hash para publicar outros arquivos privados.
 
-Os pontos 1 a 3 e a conciliação já estavam no histórico remoto ao iniciar o ponto 4. O ponto 4 ainda não foi commitado ou enviado. Nenhuma nova release foi publicada por estas correções.
+Os pontos 1 a 4 e a conciliação já estavam no histórico remoto ao iniciar o ponto 5. O ponto 5 ainda não foi commitado ou enviado. Nenhuma nova release foi publicada por estas correções.
 
 ## O que o projeto faz
 
@@ -70,9 +70,9 @@ Mensagem de commit sugerida, ajustável ao resultado: `fix: inclui perfis secund
 
 ## Ponto 5 — derivados Firefox e outras localizações de instalação
 
-### Defeito atual
+### Defeito corrigido no ponto 5
 
-`discover()` passa `/usr/bin` fixo a `discover_at()`. A família Firefox depende do arquivo `/usr/bin/firefox` e procura apenas as raízes Firefox conhecidas. Um LibreWolf nativo, por exemplo, não é descoberto por essa lógica. A descoberta Chromium já possui catálogo próprio em `browsers/chromium.rs`; não duplicar aliases desconectados da verificação de processos.
+A descoberta anterior fixava `/usr/bin` e só reconhecia Firefox nessa família. Agora `discovery::Search` considera PATH e metadados desktop, e o catálogo Gecko inclui LibreWolf com seus próprios perfis. A descoberta Chromium continua usando os mesmos aliases da proteção de processos. O escopo implementado, as fontes e o contrato JSON estão em [FIX_05_BROWSER_DISCOVERY.md](FIX_05_BROWSER_DISCOVERY.md). Zen e Floorp não foram acrescentados nesta entrega.
 
 ### Implementação esperada
 
@@ -94,7 +94,7 @@ Mensagem de commit sugerida, ajustável ao resultado: `fix: inclui perfis secund
 - A proteção contra Chromium aberto continua cobrindo todos os aliases reconhecidos pela descoberta.
 - Testes de descoberta usam diretórios/executáveis simulados; não instalar navegadores para fazer esses testes passarem.
 
-Mensagem de commit sugerida: `feat: detecta derivados Firefox e instalações fora de usr bin`.
+Mensagem de commit sugerida: `feat: detecta LibreWolf e instalações nativas fora de /usr/bin`.
 
 ## Ponto 6 — resultados estruturados e estado visível no painel
 
@@ -186,12 +186,12 @@ O teste GTK ignorado da suíte comum é executado por `native-ui-smoke` em Broad
 
 ## Última validação realizada
 
-Após o ponto 4 passaram **117 testes Rust comuns**, incluindo nove novas regressões de perfis, **19 verificações do executável** e o teste GTK isolado ampliado para seleção, cancelamento, ordem e rolagem com 30 perfis. Formatação, Clippy com `-D warnings`, builds debug/release e verificação de publicação passaram. O identificador nativo foi confirmado nos dois ELF release. Publicação: **90 fontes**, nenhuma ocorrência. Os relatórios locais são `test-results/fix04-*`; são ignorados e podem não existir no outro computador.
+Após o ponto 5 passaram **135 testes Rust comuns**, incluindo 18 novas regressões de descoberta, e **20 verificações do executável**, com inventário Firefox/LibreWolf em HOME/XDG privados. O teste GTK isolado passou três vezes consecutivas após substituir a espera fixa de layout por uma espera limitada pela condição real, mantendo a validação de seleção, cancelamento, ordem e rolagem. Formatação, Clippy com `-D warnings`, builds debug/release e verificação de publicação passaram. O identificador nativo foi confirmado nos dois ELF release. Publicação: **93 fontes**, nenhuma ocorrência. Os relatórios locais são `test-results/fix05-*`; são ignorados e podem não existir no outro computador.
 
-Também passou novamente a integração Firefox/NSS com carregamento real, migração do RPM antigo, backup, rollback, idempotência, conflito e preservação de um segundo perfil não selecionado. Esses resultados não substituem a validação dos futuros pontos 5 e 6. O número de testes deverá aumentar; não fixar a contagem antiga no código do relatório.
+Também passou novamente a integração Firefox/NSS com carregamento real, migração do RPM antigo, backup, rollback, idempotência, conflito e preservação de um segundo perfil não selecionado. Esses resultados não substituem a validação do futuro ponto 6 nem homologam acesso real em LibreWolf. O número de testes deverá aumentar; não fixar a contagem antiga no código do relatório.
 
-As quatro correções não acessaram conta real, cadastraram computador ou solicitaram assinatura real. A validação manual no Fedora GNOME após o ponto 6 deve conferir, como usuário normal, descoberta dos navegadores existentes, seleção dos perfis, cancelamento, bloqueio com navegador aberto, repetição idempotente e resultados no painel. Qualquer autenticação/assinatura real será uma ação posterior consciente do usuário, não parte automática dos testes de desenvolvimento.
+As cinco correções não acessaram conta real, cadastraram computador ou solicitaram assinatura real. A validação manual no Fedora GNOME após o ponto 6 deve conferir, como usuário normal, descoberta dos navegadores existentes, seleção dos perfis, cancelamento, bloqueio com navegador aberto, repetição idempotente e resultados no painel. Qualquer autenticação/assinatura real será uma ação posterior consciente do usuário, não parte automática dos testes de desenvolvimento.
 
 ## Instrução curta para a próxima IA
 
-> Leia este documento, `CONTINUIDADE_IA_FEDORA.md`, os documentos `docs/FIX_01_RUNTIME.md` a `docs/FIX_04_FIREFOX_PROFILES.md` e o código atual. Os pontos 1 a 4 já foram implementados. Confirme que o usuário fez o commit do ponto 4 antes de implementar somente o ponto 5, incluindo testes e documentação. Prepare apenas as alterações desse ponto e sugira o commit; eu farei o commit antes de avançarmos ao ponto 6. Não instale navegadores e não execute operações reais na conta. O teste manual no Fedora GNOME será depois do ponto 6.
+> Leia este documento, `CONTINUIDADE_IA_FEDORA.md`, os documentos `docs/FIX_01_RUNTIME.md` a `docs/FIX_05_BROWSER_DISCOVERY.md` e o código atual. Os pontos 1 a 5 já foram implementados. Confirme que o usuário fez o commit do ponto 5 antes de implementar somente o ponto 6, incluindo testes e documentação. Prepare as alterações e sugira o commit; eu farei o commit. Não instale navegadores e não execute operações reais na conta. O teste manual no Fedora GNOME será depois do ponto 6.

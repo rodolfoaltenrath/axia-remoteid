@@ -16,6 +16,7 @@ fn running_chromium_refuses_before_creating_any_database_or_backup() {
         database: home.path().join(".pki/nssdb"),
         create: true,
         firefox_default: None,
+        installations: Vec::new(),
     };
     let module = laboratory_module(home.path());
     let error = register_with(&target, &module, home.path(), false, || Ok(true))
@@ -41,6 +42,7 @@ fn unreadable_process_inventory_preserves_existing_database_and_permissions() {
         database: database.clone(),
         create: false,
         firefox_default: None,
+        installations: Vec::new(),
     };
     let module = laboratory_module(home.path());
     assert!(
@@ -68,6 +70,7 @@ fn browser_starting_after_backup_is_detected_before_nss_can_write() {
         database: home.path().join(".pki/nssdb"),
         create: true,
         firefox_default: None,
+        installations: Vec::new(),
     };
     let module = laboratory_module(home.path());
     let mut checks = 0;
@@ -97,6 +100,7 @@ fn browser_starting_during_nss_initialization_suspends_mutation_and_rollback() {
         database: home.path().join(".pki/nssdb"),
         create: true,
         firefox_default: None,
+        installations: Vec::new(),
     };
     let module = laboratory_module(home.path());
     let mut checks = 0;
