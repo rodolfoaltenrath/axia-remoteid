@@ -2,20 +2,22 @@
 
 **Certificados digitais em nuvem no Linux.**
 
-**[Baixar RPM — Fedora 44 x86_64](https://github.com/rodolfoaltenrath/axia-remoteid/releases/download/v0.1.0-alpha.2/axia-remotedid-0.1.0-0.2.alpha2.fc44.x86_64.rpm)** · **[Guia de instalação e testes](docs/TESTING.md)**
+**[Baixar RPM — Fedora 44 x86_64](https://github.com/rodolfoaltenrath/axia-remoteid/releases/download/v0.1.0-alpha.3/axia-remotedid-0.1.0-0.3.alpha3.fc44.x86_64.rpm)** · **[Guia de instalação e testes](docs/TESTING.md)**
 
 O Axia RemotedID conecta certificados em nuvem da Certisign a aplicações Linux compatíveis. Com uma interface gráfica, permite cadastrar o computador, consultar os certificados da conta e autorizar seu uso em autenticação e operações de assinatura digital.
 
 A solução atende profissionais e organizações que precisam acessar serviços com certificado digital em um ambiente Linux. A versão atual está em **fase alpha**, com foco no Fedora e no Firefox nativo.
 
-A **alpha.2** está disponível para testes, com interface nativa e configuração dos navegadores já instalados, sem executar Python ou Zenity e sem instalar navegador junto. Os novos fluxos passaram na validação automatizada; a homologação de uso real desta pré-versão continua em andamento.
+A **alpha.3** está disponível para testes, com interface nativa e configuração dos navegadores já instalados, sem executar Python ou Zenity e sem instalar navegador junto. Os novos fluxos passaram na validação automatizada; a homologação de uso real desta pré-versão continua em andamento.
+
+Esta versão corrige a seleção de perfis Firefox e LibreWolf ainda não preparados, evitando que um perfil vazio cause uma falha adicional ao configurar o navegador principal.
 
 ## Principais recursos
 
 - **Conexão com a conta:** cadastro do computador e atualização dos certificados pela interface gráfica.
 - **Integração com o Firefox:** disponibilização dos certificados para serviços que oferecem autenticação por certificado digital.
-- **Detecção de navegadores na alpha.2:** preparação dos perfis Firefox e LibreWolf e da base de certificados dos navegadores Chromium encontrados no computador, com escolha pelo usuário.
-- **Acompanhamento na alpha.2:** resultados por navegador e perfil no painel, com orientação quando uma configuração precisa de atenção.
+- **Detecção de navegadores na alpha.3:** preparação dos perfis Firefox e LibreWolf e da base de certificados dos navegadores Chromium encontrados no computador, com escolha pelo usuário.
+- **Acompanhamento na alpha.3:** resultados por navegador e perfil no painel, com orientação quando uma configuração precisa de atenção.
 - **Autorização pelo usuário:** solicitação de senha e código temporário do aplicativo Certisign quando uma operação exige autorização.
 - **Sessão temporária:** recurso de reutilização da autorização por até dez minutos no mesmo aplicativo e certificado, para reduzir solicitações repetidas.
 - **Inicialização opcional:** escolha, na primeira abertura, de iniciar o aplicativo ao entrar na sessão do Fedora.
@@ -40,10 +42,10 @@ A inicialização automática mantém o aplicativo na bandeja, sem abrir janela 
 | --- | --- |
 | Fedora 44 com GNOME | Interface gráfica, cadastro e consulta de certificados validados |
 | Firefox nativo | Integração com os certificados disponível |
-| LibreWolf nativo — alpha.2 | Descoberta e seleção de perfis implementadas; autenticação real ainda precisa de validação |
-| Chromium nativo — alpha.2 | Autenticação TLS 1.2 validada em laboratório; uso real com Certisign ainda precisa de confirmação |
+| LibreWolf nativo — alpha.3 | Descoberta e seleção de perfis implementadas; autenticação real ainda precisa de validação |
+| Chromium nativo — alpha.3 | Autenticação TLS 1.2 validada em laboratório; uso real com Certisign ainda precisa de confirmação |
 | GERID / INSS | Acesso real por certificado confirmado, incluindo o segundo fator do serviço |
-| Chrome, Brave, Edge, Vivaldi e Opera — alpha.2 | Detecção implementada; cada distribuição ainda precisa de validação própria |
+| Chrome, Brave, Edge, Vivaldi e Opera — alpha.3 | Detecção implementada; cada distribuição ainda precisa de validação própria |
 | Navegadores Flatpak e demais portais | Compatibilidade ainda não validada |
 | Assinatura de documentos PDF | Ainda não disponível nesta versão |
 
