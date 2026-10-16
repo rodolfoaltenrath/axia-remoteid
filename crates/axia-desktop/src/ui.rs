@@ -193,7 +193,19 @@ pub fn message(text: &str) {
     let _ = prepare_form("Axia RemotedID", text, &[], "OK", None).wait(None);
 }
 
-pub fn choose(text: &str, choices: &[String]) -> Option<Vec<usize>> {
+fn checkbox_label(checkbox: &gtk::CheckButton) -> Option<gtk::Label> {
+    // Keep compatibility with the existing GTK 4.4 API baseline.
+    let mut child = checkbox.first_child();
+    while let Some(widget) = child {
+        child = widget.next_sibling();
+        if let Ok(label) = widget.downcast::<gtk::Label>() {
+            return Some(label);
+        }
+    }
+    None
+}
+
+fn prepare_choices(text: &str, choices: &[String]) -> (Form, Vec<gtk::CheckButton>) {
     let form = prepare_form(
         "Axia RemotedID — Configurar navegadores",
         text,
@@ -202,12 +214,27 @@ pub fn choose(text: &str, choices: &[String]) -> Option<Vec<usize>> {
         Some("Agora não"),
     );
     let area = form.window.child().unwrap().downcast::<gtk::Box>().unwrap();
+    let choices_area = gtk::Box::new(gtk::Orientation::Vertical, 12);
+    let scroll = gtk::ScrolledWindow::builder()
+        .hscrollbar_policy(gtk::PolicyType::Never)
+        .vscrollbar_policy(gtk::PolicyType::Automatic)
+        .max_content_height(360)
+        .propagate_natural_height(true)
+        .child(&choices_area)
+        .build();
+    area.insert_child_after(&scroll, area.first_child().as_ref());
     let checkboxes: Vec<_> = choices
         .iter()
         .map(|label| {
             let checkbox = gtk::CheckButton::with_label(label);
+            if let Some(label) = checkbox_label(&checkbox) {
+                label.set_wrap(true);
+                label.set_wrap_mode(gtk::pango::WrapMode::WordChar);
+                label.set_max_width_chars(60);
+                label.set_xalign(0.0);
+            }
             checkbox.set_active(true);
-            area.insert_child_after(&checkbox, area.first_child().as_ref());
+            choices_area.append(&checkbox);
             checkbox
         })
         .collect();
@@ -219,6 +246,15 @@ pub fn choose(text: &str, choices: &[String]) -> Option<Vec<usize>> {
         });
     }
     form.accept.set_sensitive(!choices.is_empty());
+    (form, checkboxes)
+}
+
+pub fn choose(text: &str, choices: &[String]) -> Option<Vec<usize>> {
+    let (form, checkboxes) = prepare_choices(text, choices);
+    wait_choices(form, checkboxes)
+}
+
+fn wait_choices(form: Form, checkboxes: Vec<gtk::CheckButton>) -> Option<Vec<usize>> {
     form.wait(None)?;
     Some(
         checkboxes
@@ -295,6 +331,57 @@ mod tests {
     #[ignore = "requires isolated graphical display"]
     fn native_forms_clear_passwords_cancel_timeout_and_keep_worker_responsive() {
         init().unwrap();
+        let choices = [
+            "Firefox — Principal (padrão de instalação)\n~/config/mozilla/firefox/main".into(),
+            "Firefox — Trabalho\n~/config/mozilla/firefox/work".into(),
+        ];
+        let (form, checkboxes) = prepare_choices("Perfis sintéticos", &choices);
+        assert_eq!(
+            checkboxes[0].next_sibling(),
+            Some(checkboxes[1].clone().upcast())
+        );
+        for (checkbox, expected) in checkboxes.iter().zip(&choices) {
+            let label = checkbox_label(checkbox).unwrap();
+            assert_eq!(label.text().as_str(), expected);
+            assert!(label.wraps());
+            checkbox.set_active(false);
+        }
+        assert!(!form.accept.is_sensitive());
+        checkboxes[1].set_active(true);
+        assert!(form.accept.is_sensitive());
+        let close = form.window.clone();
+        glib::timeout_add_local_once(Duration::from_millis(20), move || close.close());
+        assert!(form.wait(None).is_none());
+        let (form, checkboxes) = prepare_choices("Perfis sintéticos", &choices);
+        checkboxes[0].set_active(false);
+        let accept = form.accept.clone();
+        glib::timeout_add_local_once(Duration::from_millis(20), move || accept.emit_clicked());
+        assert_eq!(wait_choices(form, checkboxes), Some(vec![1]));
+        let many: Vec<_> = (0..30)
+            .map(|index| format!("Firefox — Perfil {index}\n~/perfis/laboratorio/{index}"))
+            .collect();
+        let (form, _) = prepare_choices("Muitos perfis sintéticos", &many);
+        let area = form.window.child().unwrap();
+        let scroll = area
+            .first_child()
+            .unwrap()
+            .next_sibling()
+            .unwrap()
+            .downcast::<gtk::ScrolledWindow>()
+            .unwrap();
+        let close = form.window.clone();
+        let bounded = Rc::new(Cell::new(false));
+        let result = bounded.clone();
+        glib::timeout_add_local_once(Duration::from_millis(50), move || {
+            let adjustment = scroll.vadjustment();
+            result.set(adjustment.upper() > adjustment.page_size() && scroll.height() <= 360);
+            close.close();
+        });
+        assert!(form.wait(None).is_none());
+        assert!(
+            bounded.get(),
+            "Muitos perfis precisam rolar em uma área limitada"
+        );
         crate::gui::connection_tests::exercise_connection_recovery();
         if unsafe { libc::geteuid() } == 0 {
             let temporary = tempfile::tempdir().unwrap();

@@ -1,8 +1,14 @@
 # Continuidade do Axia RemotedID
 
-**Retomada atual — 15/10/2026:** os pontos 1 a 3 da revisão de navegadores estão concluídos e commitados até `b0667ca`. As pendências 4 a 6, critérios de aceitação, fluxo de commits e instruções para outro computador estão em [CONTINUAR_CORRECOES_NAVEGADORES.md](docs/CONTINUAR_CORRECOES_NAVEGADORES.md). Leia esse plano antes das próximas etapas históricas abaixo. O usuário decidiu fazer o teste manual no Fedora GNOME depois dos seis pontos.
+**Retomada atual — 15/10/2026:** os pontos 1 a 4 da revisão de navegadores estão implementados. O ponto 4 foi concluído sobre `29d9b60` e aguarda commit pelo usuário; o próximo é o ponto 5. As pendências 5 e 6, critérios de aceitação e fluxo de commits estão em [CONTINUAR_CORRECOES_NAVEGADORES.md](docs/CONTINUAR_CORRECOES_NAVEGADORES.md). Leia esse plano antes das próximas etapas históricas abaixo. O teste manual no Fedora GNOME continua previsto para depois dos seis pontos.
 
-Estado atualizado em 15/10/2026, após conciliar as alterações locais com os quatro commits que estavam no GitHub. Leia este arquivo, o [README](README.md), a [referência do protocolo](docs/PROTOCOL.md) e o código atual antes de propor alterações. Este documento substitui o antigo diário de investigação.
+Estado atualizado em 15/10/2026, após concluir o ponto 4. Leia este arquivo, o [README](README.md), a [referência do protocolo](docs/PROTOCOL.md) e o código atual antes de propor alterações. Este documento substitui o antigo diário de investigação.
+
+## Correção 4 — perfis secundários do Firefox
+
+A descoberta agora lista todos os perfis existentes de `profiles.ini` nas raízes XDG e legada, deduplicados pelo caminho canônico. Padrões de instalação e geral são metadados, sem excluir secundários. O diálogo distingue nomes repetidos pela localização, conserva a ordem da descoberta e permite rolagem com muitos perfis. O rótulo de progresso não ganha caminhos pessoais. A CLI escolhe apenas um padrão inequívoco ou um único perfil; múltiplos padrões exigem `--profile`. O inventário inclui o campo opcional `firefox_default`, documentado em [FIX_04_FIREFOX_PROFILES.md](docs/FIX_04_FIREFOX_PROFILES.md).
+
+Passaram 117 testes Rust comuns, incluindo nove novas regressões, GTK isolado com seleção/cancelamento e 30 perfis, 19 verificações CLI, Firefox/NSS com preservação de uma segunda base real de laboratório, formatação, Clippy com `-D warnings` e builds debug/release. O identificador nativo continua nos dois ELF release. Publicação: 90 fontes, nenhuma ocorrência. Relatórios em `test-results/fix04-*`, ignorados pelo Git. Nenhuma conta ou perfil real foi acessado, e não houve instalação ou publicação de RPM. As alterações deste ponto aguardam commit pelo usuário antes do ponto 5.
 
 ## Conciliação entre as duas máquinas — 15/10/2026
 

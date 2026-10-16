@@ -47,7 +47,7 @@ enum Command {
         /// Mostra apenas a detecção local, sem alterar configuração.
         #[arg(long, conflicts_with = "yes")]
         list: bool,
-        /// Configuração explícita pelo terminal, sem janela de confirmação.
+        /// Configura todos os alvos detectados, incluindo perfis secundários, sem janela.
         #[arg(long)]
         yes: bool,
         #[arg(long, value_enum, requires = "yes")]
@@ -426,6 +426,7 @@ fn run(cli: Cli) -> Result<()> {
                 label: "Firefox".into(),
                 database,
                 create: false,
+                firefox_default: None,
             },
             None => axia_desktop::browsers::discover(&home)?.firefox_target()?,
         };

@@ -20,7 +20,7 @@ As 26 regressões da antiga suíte Python foram substituídas ou incorporadas ao
 | Trava Firefox mantida por outro processo; recusa de symlink (2) | `firefox_profile_lock_held_by_another_process_is_preserved`: outro processo Rust mantém um `F_SETLK` independente do auxiliar de produção; `profile_lock_refuses_symlinks_without_touching_the_target` preserva o destino |
 | Atalho com espaços/metacaracteres; recusa de substituição de symlink (2) | `native_install_preserves_account_and_refuses_foreign_launcher`, com `desktop-file-validate`, permissões e preservação da identidade |
 
-O teste de múltiplos padrões não representa suporte a todos os perfis secundários. A ampliação da descoberta continua sendo o ponto 4 do [plano de navegadores](CONTINUAR_CORRECOES_NAVEGADORES.md).
+A descoberta também cobre perfis secundários e nomes repetidos, com testes próprios em `browsers/firefox/tests.rs`. A preferência por padrões não filtra mais a lista. O teste de múltiplos padrões conserva a exigência de seleção explícita quando a CLI não tem um único padrão inequívoco. Veja a [correção 4](FIX_04_FIREFOX_PROFILES.md).
 
 ## Fluxo desktop/RPM: 6 cenários
 

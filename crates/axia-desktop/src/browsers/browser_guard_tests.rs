@@ -15,6 +15,7 @@ fn running_chromium_refuses_before_creating_any_database_or_backup() {
         label: "Laboratory Chromium".into(),
         database: home.path().join(".pki/nssdb"),
         create: true,
+        firefox_default: None,
     };
     let module = laboratory_module(home.path());
     let error = register_with(&target, &module, home.path(), false, || Ok(true))
@@ -39,6 +40,7 @@ fn unreadable_process_inventory_preserves_existing_database_and_permissions() {
         label: "Laboratory Chromium".into(),
         database: database.clone(),
         create: false,
+        firefox_default: None,
     };
     let module = laboratory_module(home.path());
     assert!(
@@ -65,6 +67,7 @@ fn browser_starting_after_backup_is_detected_before_nss_can_write() {
         label: "Laboratory Chromium".into(),
         database: home.path().join(".pki/nssdb"),
         create: true,
+        firefox_default: None,
     };
     let module = laboratory_module(home.path());
     let mut checks = 0;
@@ -93,6 +96,7 @@ fn browser_starting_during_nss_initialization_suspends_mutation_and_rollback() {
         label: "Laboratory Chromium".into(),
         database: home.path().join(".pki/nssdb"),
         create: true,
+        firefox_default: None,
     };
     let module = laboratory_module(home.path());
     let mut checks = 0;

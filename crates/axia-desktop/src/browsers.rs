@@ -6,7 +6,6 @@ use anyhow::{Context, Result, ensure};
 use libloading::Library;
 use serde::Serialize;
 use std::{
-    collections::BTreeSet,
     ffi::{CString, c_char, c_int, c_ulong, c_void},
     fs::{self, File, OpenOptions},
     os::{
@@ -21,6 +20,7 @@ use std::{
 };
 
 mod chromium;
+mod firefox;
 
 pub const MODULE_NAME: &str = "DesktopID Linux Alpha";
 pub use crate::installation::runtime::SYSTEM_MODULE;
@@ -45,12 +45,34 @@ pub enum Family {
     Chromium,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum FirefoxDefault {
+    Installation,
+    Profile,
+}
+
 #[derive(Clone, Debug, Serialize)]
 pub struct Target {
     pub family: Family,
     pub label: String,
     pub database: PathBuf,
     pub create: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub firefox_default: Option<FirefoxDefault>,
+}
+
+impl Target {
+    fn selection_label(&self, home: &Path) -> String {
+        if self.family != Family::Firefox {
+            return self.label.clone();
+        }
+        let location = match self.database.strip_prefix(home) {
+            Ok(relative) => format!("~/{}", relative.display()),
+            Err(_) => self.database.display().to_string(),
+        };
+        format!("{}\n{location}", self.label)
+    }
 }
 
 #[derive(Serialize)]
@@ -63,18 +85,26 @@ pub struct Inventory {
 impl Inventory {
     /// Never guess among multiple installation defaults.
     pub fn firefox_target(self) -> Result<Target> {
-        let mut targets = self
+        let mut targets: Vec<_> = self
             .targets
             .into_iter()
-            .filter(|target| target.family == Family::Firefox);
-        let target = targets
-            .next()
-            .context("Escolha um perfil Firefox explicitamente")?;
+            .filter(|target| target.family == Family::Firefox)
+            .collect();
+        let default = [FirefoxDefault::Installation, FirefoxDefault::Profile]
+            .into_iter()
+            .find(|kind| {
+                targets
+                    .iter()
+                    .any(|target| target.firefox_default == Some(*kind))
+            });
+        if let Some(default) = default {
+            targets.retain(|target| target.firefox_default == Some(default));
+        }
         ensure!(
-            targets.next().is_none(),
+            targets.len() == 1,
             "Escolha um perfil Firefox explicitamente"
         );
-        Ok(target)
+        Ok(targets.remove(0))
     }
 }
 
@@ -84,89 +114,17 @@ fn absolute_environment(name: &str, default: PathBuf) -> Result<PathBuf> {
     Ok(path)
 }
 
-fn profiles(home: &Path, config: &Path) -> Result<Vec<(PathBuf, String)>> {
-    let mut preferred = Vec::new();
-    let mut all = Vec::new();
-    let mut roots = BTreeSet::new();
-    for root in [
-        config.join("mozilla/firefox"),
-        home.join(".mozilla/firefox"),
-    ] {
-        if !roots.insert(root.clone()) || !root.join("profiles.ini").is_file() {
-            continue;
-        }
-        let sections = desktop::ini(&fs::read_to_string(root.join("profiles.ini"))?)?;
-        for (section, values) in &sections {
-            if section.starts_with("Install") {
-                if let Some(path) = values.get("default") {
-                    let candidate = root.join(path);
-                    if candidate.is_dir() {
-                        preferred.push(candidate.canonicalize()?);
-                    }
-                }
-            } else if section.starts_with("Profile")
-                && let Some(path) = values.get("path")
-            {
-                let candidate = if values.get("isrelative").is_none_or(|value| value == "1") {
-                    root.join(path)
-                } else {
-                    PathBuf::from(path)
-                };
-                if candidate.is_dir() {
-                    let candidate = candidate.canonicalize()?;
-                    if preferred.is_empty()
-                        && values.get("default").is_some_and(|value| value == "1")
-                    {
-                        preferred.push(candidate.clone());
-                    }
-                    all.push((
-                        candidate,
-                        values
-                            .get("name")
-                            .cloned()
-                            .unwrap_or_else(|| "Perfil Firefox".into()),
-                    ));
-                }
-            }
-        }
-    }
-    let mut seen = BTreeSet::new();
-    if !preferred.is_empty() {
-        return Ok(preferred
-            .into_iter()
-            .filter(|path| seen.insert(path.clone()))
-            .map(|path| {
-                let label = all
-                    .iter()
-                    .find(|(candidate, _)| candidate == &path)
-                    .map(|(_, name)| name.clone())
-                    .unwrap_or_else(|| "Perfil Firefox".into());
-                (path, label)
-            })
-            .collect());
-    }
-    Ok(all
-        .into_iter()
-        .filter(|(path, _)| seen.insert(path.clone()))
-        .collect())
-}
-
 fn discover_at(home: &Path, config: &Path, data: &Path, bin: &Path) -> Result<Inventory> {
     let mut installed = Vec::new();
     let mut targets = Vec::new();
     let mut notices = Vec::new();
     if bin.join("firefox").is_file() {
         installed.push("Firefox".into());
-        let profiles = profiles(home, config)?;
+        let profiles = firefox::targets(home, config)?;
         if profiles.is_empty() {
             notices.push("Abra e feche o Firefox uma vez para preparar o perfil.".into());
         }
-        targets.extend(profiles.into_iter().map(|(database, name)| Target {
-            family: Family::Firefox,
-            label: format!("Firefox — {name}"),
-            database,
-            create: false,
-        }));
+        targets.extend(profiles);
     }
     let chromium: Vec<&str> = chromium::BROWSERS
         .iter()
@@ -199,6 +157,7 @@ fn discover_at(home: &Path, config: &Path, data: &Path, bin: &Path) -> Result<In
             label: format!("{} — certificados compartilhados", chromium.join(", ")),
             database,
             create,
+            firefox_default: None,
         });
     }
     for (name, id) in [
@@ -729,6 +688,7 @@ fn setup_with(
             label: "Firefox".into(),
             database,
             create: false,
+            firefox_default: None,
         }]
     } else {
         inventory.targets
@@ -743,7 +703,10 @@ fn setup_with(
         text.push('\n');
         text.push_str(&notice);
     }
-    let choices: Vec<_> = targets.iter().map(|target| target.label.clone()).collect();
+    let choices: Vec<_> = targets
+        .iter()
+        .map(|target| target.selection_label(&home))
+        .collect();
     let Some(selected) = choose(&text, &choices) else {
         return Ok(None);
     };
@@ -871,7 +834,7 @@ mod tests {
                     ))
                 },
                 |_, choices| {
-                    assert_eq!(choices, &["Firefox"]);
+                    assert_eq!(choices, &["Firefox\n~/profile"]);
                     selection
                 },
                 |_, _, _| panic!("cancelled, empty or invalid selection must not enter NSS"),
@@ -999,12 +962,13 @@ mod tests {
         fs::create_dir_all(data.join("pki/nssdb")).unwrap();
         let found = discover_at(home, &config, &data, &bin).unwrap();
         assert_eq!(found.installed.len(), 3);
-        assert_eq!(found.targets.len(), 2);
+        assert_eq!(found.targets.len(), 3);
         assert_eq!(found.targets[0].database, firefox.join("release"));
-        assert_eq!(found.targets[1].database, data.join("pki/nssdb"));
+        assert_eq!(found.targets[1].database, firefox.join("old"));
+        assert_eq!(found.targets[2].database, data.join("pki/nssdb"));
         fs::create_dir_all(home.join(".pki/nssdb")).unwrap();
         assert_eq!(
-            discover_at(home, &config, &data, &bin).unwrap().targets[1].database,
+            discover_at(home, &config, &data, &bin).unwrap().targets[2].database,
             home.join(".pki/nssdb")
         );
     }

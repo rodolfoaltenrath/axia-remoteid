@@ -1,33 +1,33 @@
-# Continuidade: concluir os pontos 4, 5 e 6 dos navegadores
+# Continuidade: concluir os pontos 5 e 6 dos navegadores
 
-Atualizado em **15/10/2026**, depois do commit `b0667ca`. Este é o ponto de entrada para continuar a tarefa em outro computador. Leia também o código atual, os documentos das três correções concluídas e `DEVELOPMENT.md`. O documento geral `../CONTINUIDADE_IA_FEDORA.md` conserva histórico anterior; as prioridades desta tarefa estão aqui.
+Atualizado em **15/10/2026**, depois de implementar o ponto 4 sobre `29d9b60`. O ponto 4 está pronto para revisão e commit pelo usuário. Este é o ponto de entrada para continuar a tarefa em outro computador. Leia também o código atual, os documentos das quatro correções e `DEVELOPMENT.md`. O documento geral `../CONTINUIDADE_IA_FEDORA.md` conserva histórico anterior; as prioridades desta tarefa estão aqui.
 
 ## Combinado com o usuário
 
 - Implementar **um ponto completo por vez**, na ordem 4 → 5 → 6.
 - Concluir implementação, regressões e documentação; preparar somente as alterações daquele ponto e sugerir a mensagem de commit.
 - **O usuário executa os commits.** Não fazer commit, push ou release automaticamente. Depois do commit confirmado, passar ao ponto seguinte.
-- O usuário está no Windows e decidiu testar manualmente em outro computador com **Fedora e GNOME depois de concluir os seis pontos**. Continuar a validação automatizada sem exigir esse teste manual a cada ponto.
+- O trabalho atual está no Fedora. O usuário decidiu fazer a validação manual no **Fedora e GNOME depois de concluir os seis pontos**. Continuar a validação automatizada sem exigir esse teste manual a cada ponto.
 - O aplicativo detecta navegadores já instalados. **Não instalar navegadores** como requisito ou efeito do projeto.
 - A configuração automática acontece quando o usuário clica em **Configurar navegadores**, escolhe os alvos e confirma. Não transformar isso em alterações silenciosas durante a instalação ou a inicialização.
 - Incluir os derivados Firefox e Chromium cujo suporte seja fundamentado no código e nos metadados de instalação/perfil. Não prometer compatibilidade universal com todos os derivados.
 
 ## Estado confirmado ao escrever este documento
 
-O diretório de trabalho estava limpo. Os três pontos anteriores já estão em commits locais:
+O ponto 4 foi implementado sobre um diretório de trabalho limpo, depois do commit de conciliação `29d9b60`. Seu código e documentação ainda aguardam commit pelo usuário:
 
 | Ponto | Situação | Commit | Documento |
 | --- | --- | --- | --- |
 | 1. Seleção consistente do runtime nativo | Concluído | `39a3fac` | [FIX_01_RUNTIME.md](FIX_01_RUNTIME.md) |
 | 2. Chromium aberto e recuperação da base NSS | Concluído | `9e695c9` | [FIX_02_CHROMIUM.md](FIX_02_CHROMIUM.md) |
 | 3. Tela após cadastro salvo e consulta de carteira falha | Concluído | `b0667ca` | [FIX_03_CONNECTION.md](FIX_03_CONNECTION.md) |
-| 4. Perfis secundários Firefox | **Próximo a implementar** | — | Especificação abaixo |
-| 5. Derivados Firefox e executáveis fora de `/usr/bin` | Pendente | — | Especificação abaixo |
+| 4. Perfis secundários Firefox | Implementado; aguardando commit | — | [FIX_04_FIREFOX_PROFILES.md](FIX_04_FIREFOX_PROFILES.md) |
+| 5. Derivados Firefox e executáveis fora de `/usr/bin` | **Próximo a implementar** | — | Especificação abaixo |
 | 6. Resultados por alvo no painel | Pendente | — | Especificação abaixo |
 
 A migração dos testes Python para Rust também está no histórico atual. Não recriar a suíte Python. O fixture público `python-vectors.json` é intencional e permanece como referência sintética; não alterar seu conteúdo nem relaxar a exceção de hash para publicar outros arquivos privados.
 
-Este registro confirma commits locais, **não confirma que tenham sido enviados ao GitHub**. Nenhuma nova release foi publicada por estas três correções.
+Os pontos 1 a 3 e a conciliação já estavam no histórico remoto ao iniciar o ponto 4. O ponto 4 ainda não foi commitado ou enviado. Nenhuma nova release foi publicada por estas correções.
 
 ## O que o projeto faz
 
@@ -42,9 +42,9 @@ Os serviços desejados incluem Gerid, PJe, eproc, Projudi, PJeOffice, e-CAC, aut
 
 ## Ponto 4 — listar os perfis secundários Firefox
 
-### Defeito atual
+### Defeito corrigido no ponto 4
 
-Em `crates/axia-desktop/src/browsers.rs`, `profiles()` enumera os perfis de `profiles.ini`, mas, quando encontra perfis preferidos, retorna apenas esses e descarta os demais. Exemplo: **Principal** é o padrão e **Trabalho** também existe; apenas Principal aparece para configuração.
+A implementação anterior enumerava os perfis de `profiles.ini`, mas, quando encontrava perfis preferidos, retornava apenas esses e descartava os demais. A descoberta agora está em `browsers/firefox.rs` e mantém todos os perfis existentes. Exemplo corrigido: **Principal** é o padrão e **Trabalho** também aparece para configuração.
 
 ### Implementação esperada
 
@@ -64,7 +64,7 @@ Em `crates/axia-desktop/src/browsers.rs`, `profiles()` enumera os perfis de `pro
 - Configurar um perfil selecionado não altera os não selecionados; cancelar não abre NSS nem altera a base.
 - Os testes existentes que esperam somente o padrão devem ser atualizados para a nova especificação, mantendo a proteção contra adivinhar entre instalações diferentes.
 
-Arquivos principais: `browsers.rs` (`profiles`, `Target`, `Inventory::firefox_target`, `discover_at`, `setup_with`), `ui.rs` (`choose`) e `main.rs` (`SetupFirefox`, `SetupBrowsers`). Começar por este ponto e parar para o commit antes do ponto 5.
+Arquivos principais: `browsers/firefox.rs`, `browsers.rs` (`Target`, `Inventory::firefox_target`, `discover_at`, `setup_with`), `ui.rs` (`choose`) e `main.rs` (`SetupFirefox`, `SetupBrowsers`). Este ponto está implementado; o comportamento e o contrato JSON estão em [FIX_04_FIREFOX_PROFILES.md](FIX_04_FIREFOX_PROFILES.md). Parar para o commit antes do ponto 5.
 
 Mensagem de commit sugerida, ajustável ao resultado: `fix: inclui perfis secundários do Firefox na configuração`.
 
@@ -186,12 +186,12 @@ O teste GTK ignorado da suíte comum é executado por `native-ui-smoke` em Broad
 
 ## Última validação realizada
 
-Após o ponto 3 passaram **107 testes Rust comuns**, **18 verificações do executável** e o teste GTK isolado ampliado para recuperação de cadastro salvo. Formatação, Clippy com `-D warnings` e verificação de publicação passaram. O relatório local é `test-results/rust-20261015-200948.json`; é ignorado e pode não existir no outro computador.
+Após o ponto 4 passaram **117 testes Rust comuns**, incluindo nove novas regressões de perfis, **19 verificações do executável** e o teste GTK isolado ampliado para seleção, cancelamento, ordem e rolagem com 30 perfis. Formatação, Clippy com `-D warnings`, builds debug/release e verificação de publicação passaram. O identificador nativo foi confirmado nos dois ELF release. Publicação: **90 fontes**, nenhuma ocorrência. Os relatórios locais são `test-results/fix04-*`; são ignorados e podem não existir no outro computador.
 
-Na etapa anterior também passou a integração Firefox/NSS com carregamento real, migração do RPM antigo, backup, rollback, idempotência e conflito. Esses resultados não substituem a validação dos futuros pontos 4 a 6. O número de testes deverá aumentar; não fixar a contagem antiga no código do relatório.
+Também passou novamente a integração Firefox/NSS com carregamento real, migração do RPM antigo, backup, rollback, idempotência, conflito e preservação de um segundo perfil não selecionado. Esses resultados não substituem a validação dos futuros pontos 5 e 6. O número de testes deverá aumentar; não fixar a contagem antiga no código do relatório.
 
-As três correções não acessaram conta real, cadastraram computador ou solicitaram assinatura real. A validação manual no Fedora GNOME após o ponto 6 deve conferir, como usuário normal, descoberta dos navegadores existentes, seleção dos perfis, cancelamento, bloqueio com navegador aberto, repetição idempotente e resultados no painel. Qualquer autenticação/assinatura real será uma ação posterior consciente do usuário, não parte automática dos testes de desenvolvimento.
+As quatro correções não acessaram conta real, cadastraram computador ou solicitaram assinatura real. A validação manual no Fedora GNOME após o ponto 6 deve conferir, como usuário normal, descoberta dos navegadores existentes, seleção dos perfis, cancelamento, bloqueio com navegador aberto, repetição idempotente e resultados no painel. Qualquer autenticação/assinatura real será uma ação posterior consciente do usuário, não parte automática dos testes de desenvolvimento.
 
 ## Instrução curta para a próxima IA
 
-> Leia este documento, `CONTINUIDADE_IA_FEDORA.md`, `docs/FIX_01_RUNTIME.md`, `docs/FIX_02_CHROMIUM.md`, `docs/FIX_03_CONNECTION.md` e o código atual. Os pontos 1 a 3 já foram concluídos e commitados. Implemente somente o ponto 4, incluindo testes e documentação. Prepare apenas as alterações desse ponto e sugira o commit; eu farei o commit antes de avançarmos ao ponto 5. Não instale navegadores e não execute operações reais na conta. O teste manual no Fedora GNOME será depois do ponto 6.
+> Leia este documento, `CONTINUIDADE_IA_FEDORA.md`, os documentos `docs/FIX_01_RUNTIME.md` a `docs/FIX_04_FIREFOX_PROFILES.md` e o código atual. Os pontos 1 a 4 já foram implementados. Confirme que o usuário fez o commit do ponto 4 antes de implementar somente o ponto 5, incluindo testes e documentação. Prepare apenas as alterações desse ponto e sugira o commit; eu farei o commit antes de avançarmos ao ponto 6. Não instale navegadores e não execute operações reais na conta. O teste manual no Fedora GNOME será depois do ponto 6.

@@ -48,6 +48,20 @@ pub fn smoke(root: &Path, binary: &Path, report: &Path) -> Result<()> {
         );
     }
     checks.push("cli-version-and-help-without-ui-browser-setup-or-account-state");
+    let listed = run(&missing, &["setup-browsers", "--list"], true)?;
+    let inventory: Value = serde_json::from_slice(&listed.stdout)?;
+    ensure!(
+        inventory["installed"].is_array()
+            && inventory["targets"].is_array()
+            && inventory["notices"].is_array()
+            && listed.stderr.is_empty()
+            && !missing.exists()
+            && !home.join(".config").exists()
+            && !home.join(".mozilla").exists()
+            && !home.join(".pki").exists(),
+        "Inventário de navegadores criou estado ou iniciou configuração"
+    );
+    checks.push("browser-inventory-without-display-account-state-or-profile-creation");
     run(&state, &init, true)?;
     let original = fs::read(state.join("identity.pem"))?;
     ensure!(

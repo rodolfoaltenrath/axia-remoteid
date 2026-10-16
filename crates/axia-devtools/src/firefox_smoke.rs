@@ -36,6 +36,13 @@ pub fn worker(module: &Path, client: &Path, home: &Path) -> Result<()> {
     fs::create_dir(&profile)?;
     fs::set_permissions(&profile, fs::Permissions::from_mode(0o700))?;
     nss::Database::open(&profile)?.close()?;
+    let unselected = home.join("firefox-unselected");
+    fs::create_dir(&unselected)?;
+    nss::Database::open(&unselected)?.close()?;
+    let unselected_before: Vec<_> = nss::FILES
+        .iter()
+        .map(|name| Ok((*name, fs::read(unselected.join(name))?)))
+        .collect::<Result<_>>()?;
     let before: Vec<_> = nss::FILES
         .iter()
         .map(|name| Ok((*name, fs::read(profile.join(name))?)))
@@ -176,8 +183,20 @@ pub fn worker(module: &Path, client: &Path, home: &Path) -> Result<()> {
             "Firefox/NSS: obsolete RPM to native user runtime, failed migration rollback, private backup and idempotence passed."
         );
     }
+    for (name, bytes) in &unselected_before {
+        ensure!(
+            fs::read(unselected.join(name))? == *bytes,
+            "Perfil não selecionado foi alterado"
+        );
+    }
+    ensure!(
+        fs::read_dir(&unselected)?.count() == unselected_before.len()
+            && !unselected.join(".parentlock").exists()
+            && nss::registered_library(&unselected)?.is_none(),
+        "Perfil não selecionado recebeu registro ou arquivo novo"
+    );
     println!(
-        "Firefox/NSS: load, certificate/key discovery without password callback, persistence, idempotence, private backup, rollback and conflict checks passed; no cloud calls."
+        "Firefox/NSS: load, certificate/key discovery without password callback, persistence, idempotence, private backup, rollback, conflict and unselected-profile preservation passed; no cloud calls."
     );
     Ok(())
 }
