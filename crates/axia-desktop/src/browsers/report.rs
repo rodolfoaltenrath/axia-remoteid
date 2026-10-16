@@ -13,6 +13,7 @@ pub enum FailureKind {
     BrowserOpen,
     ProfileBusy,
     InspectionUnavailable,
+    ProfileNotInitialized,
     Configuration,
 }
 
@@ -24,6 +25,7 @@ impl fmt::Display for Blocked {
             FailureKind::BrowserOpen => "Feche os navegadores baseados em Chromium antes de configurar os certificados",
             FailureKind::ProfileBusy => "Feche o navegador e aguarde o fim de outras configurações: a base de certificados está em uso",
             FailureKind::InspectionUnavailable => "Não foi possível verificar se os navegadores estão fechados; tente novamente após corrigir a inspeção de processos",
+            FailureKind::ProfileNotInitialized => "Este perfil ainda não está preparado para certificados. Abra-o no navegador uma vez e feche-o antes de configurar",
             FailureKind::Configuration => "Não foi possível configurar a base de certificados",
         })
     }

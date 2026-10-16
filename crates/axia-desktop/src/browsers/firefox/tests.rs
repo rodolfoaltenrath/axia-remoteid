@@ -238,10 +238,12 @@ fn install_only_entry_gets_its_name_from_a_profile_in_another_root() {
 #[test]
 fn cancelling_preserves_both_profiles_and_confirming_only_passes_selected_secondary() {
     let home = fixture(
-        "[Profile0]\nName=Principal\nPath=main\n[Profile1]\nName=Trabalho\nPath=work\n[InstallA]\nDefault=main\n",
-        &["main", "work"],
+        "[Profile0]\nName=Principal\nPath=main\n[Profile1]\nName=Trabalho\nPath=work\n[Profile2]\nName=Sem uso\nPath=unused\nDefault=1\n[InstallA]\nDefault=main\n",
+        &["main", "work", "unused"],
     );
     let root = home.path().join("config/mozilla/firefox");
+    fs::write(root.join("unused/times.json"), b"preserve unused profile").unwrap();
+    assert_eq!(discover(home.path()).targets.len(), 3);
     for directory in ["main", "work"] {
         for name in super::super::FILES {
             fs::write(root.join(directory).join(name), b"preserve profile").unwrap();
@@ -273,8 +275,11 @@ fn cancelling_preserves_both_profiles_and_confirming_only_passes_selected_second
             &store,
             None,
             prepare,
-            |_, choices| {
+            |text, choices| {
                 assert_eq!(choices.len(), 2);
+                assert!(text.contains("Um navegador pode ter mais de um perfil"));
+                assert!(text.contains("Sem uso (padrão geral): perfil ainda não preparado"));
+                assert!(choices.iter().all(|choice| !choice.contains("Sem uso")));
                 None
             },
             |_, _| panic!("cancel must not configure any profile")
@@ -325,6 +330,27 @@ fn cancelling_preserves_both_profiles_and_confirming_only_passes_selected_second
         fs::read(root.join("work/pkcs11.txt")).unwrap(),
         b"selected profile only"
     );
+    assert_eq!(
+        fs::read(root.join("unused/times.json")).unwrap(),
+        b"preserve unused profile"
+    );
+    assert_eq!(fs::read_dir(root.join("unused")).unwrap().count(), 1);
+    // With no initialized profile, return before selection/module/NSS work.
+    for directory in ["main", "work"] {
+        for name in super::super::FILES {
+            fs::remove_file(root.join(directory).join(name)).unwrap();
+        }
+    }
+    let absent = setup_with(
+        &store,
+        None,
+        prepare,
+        |_, _| panic!("uninitialized profiles must not be offered"),
+        |_, _| panic!("must not select runtime or open NSS"),
+    )
+    .unwrap();
+    assert_eq!(absent.status, super::super::SetupStatus::NoTargets);
+    assert_eq!(absent.notices.len(), 3);
     assert_eq!(
         fs::read(store.path().join("wallet.json")).unwrap(),
         wallet_before

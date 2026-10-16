@@ -388,19 +388,14 @@ fn run(cli: Cli) -> Result<()> {
             axia_desktop::ui::message(&report.message(&home));
             return Ok(());
         }
-        let targets: Vec<_> = inventory
-            .targets
-            .iter()
-            .filter(|target| family.is_none_or(|family| family == target.family))
-            .cloned()
-            .collect();
+        let (targets, notices) = inventory.configuration_targets(family);
         let mut report = if targets.is_empty() {
             axia_desktop::browsers::report::SetupReport::from_results(Vec::new())
         } else {
             let module = axia_desktop::browsers::module(&home)?;
             axia_desktop::browsers::report::configure(targets, &module, &home, |_| {})
         };
-        report.notices = inventory.notices;
+        report.notices = notices;
         println!("{}", serde_json::to_string_pretty(&report)?);
         ensure!(
             report.successful(),

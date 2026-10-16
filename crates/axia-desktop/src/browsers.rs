@@ -23,6 +23,7 @@ mod chromium;
 mod discovery;
 mod firefox;
 pub mod report;
+mod selection;
 use report::{Blocked, FailureKind, Recovery, RecoveryState, SetupReport, SetupStatus};
 
 pub const MODULE_NAME: &str = "DesktopID Linux Alpha";
@@ -97,6 +98,19 @@ pub struct Inventory {
 }
 
 impl Inventory {
+    /// Discovery still lists every profile. Configuration offers only profiles
+    /// whose existing SQL database files can be validated by register().
+    pub fn configuration_targets(self, family: Option<Family>) -> (Vec<Target>, Vec<String>) {
+        let mut notices = self.notices;
+        let targets = self
+            .targets
+            .into_iter()
+            .filter(|target| family.is_none_or(|family| target.family == family))
+            .collect();
+        let targets = selection::eligible(targets, &mut notices);
+        (targets, notices)
+    }
+
     /// Never guess among multiple installation defaults.
     pub fn firefox_target(self) -> Result<Target> {
         ensure!(
@@ -649,6 +663,10 @@ fn register_with(
     let database = target.database.canonicalize()?;
     desktop::directory(&database, &home, false)?;
     if !target.create {
+        ensure!(
+            !selection::needs_initialization(target),
+            Blocked(FailureKind::ProfileNotInitialized)
+        );
         for name in FILES {
             let metadata = desktop::owned_file(&database.join(name))?;
             ensure!(
@@ -804,29 +822,25 @@ fn setup_with(
         store.load_wallet_public().is_ok(),
         "Conecte sua conta e atualize os certificados antes de configurar os navegadores"
     );
-    let (home, inventory) = prepare()?;
-    let targets = if let Some(database) = profile {
-        vec![Target {
+    let (home, mut inventory) = prepare()?;
+    if let Some(database) = profile {
+        inventory.targets = vec![Target {
             family: Family::Firefox,
             label: "Firefox".into(),
             database,
             create: false,
             firefox_default: None,
             installations: Vec::new(),
-        }]
-    } else {
-        inventory.targets
-    };
+        }];
+    }
+    let (targets, notices) = inventory.configuration_targets(None);
     if targets.is_empty() {
-        return Ok(SetupReport::empty(
-            SetupStatus::NoTargets,
-            inventory.notices,
-        ));
+        return Ok(SetupReport::empty(SetupStatus::NoTargets, notices));
     }
     let mut text = String::from(
-        "Feche os navegadores antes de continuar. Selecione onde deseja disponibilizar seus certificados.\nO Axia configura os navegadores instalados; nenhum navegador será instalado.",
+        "Selecione os perfis em que deseja disponibilizar seus certificados. Um navegador pode ter mais de um perfil.\nFeche os navegadores antes de continuar. Nenhum navegador será instalado.",
     );
-    for notice in &inventory.notices {
+    for notice in &notices {
         text.push('\n');
         text.push_str(notice);
     }
@@ -835,16 +849,10 @@ fn setup_with(
         .map(|target| target.selection_label(&home))
         .collect();
     let Some(selected) = choose(&text, &choices) else {
-        return Ok(SetupReport::empty(
-            SetupStatus::Cancelled,
-            inventory.notices,
-        ));
+        return Ok(SetupReport::empty(SetupStatus::Cancelled, notices));
     };
     if selected.is_empty() {
-        return Ok(SetupReport::empty(
-            SetupStatus::Cancelled,
-            inventory.notices,
-        ));
+        return Ok(SetupReport::empty(SetupStatus::Cancelled, notices));
     }
     let selected: Vec<_> = selected
         .into_iter()
@@ -856,7 +864,7 @@ fn setup_with(
         })
         .collect::<Result<_>>()?;
     let mut report = configure(selected, home)?;
-    report.notices = inventory.notices;
+    report.notices = notices;
     Ok(report)
 }
 

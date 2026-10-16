@@ -42,6 +42,8 @@ O RPM ainda não tem assinatura de distribuição. O checksum permite conferir s
 
 Os resultados de configuração ficam disponíveis enquanto o painel estiver aberto. Fechar a janela inicia uma nova lista na próxima abertura; os registros já feitos nos navegadores permanecem.
 
+**Perfis do mesmo navegador:** duas entradas Firefox representam dois perfis, não duas instalações. Na alpha.2 publicada, um perfil vazio chamado `default` pode aparecer junto do perfil principal `default-release`. Se o principal estiver **Configurado** e somente o perfil vazio mostrar “Arquivo ou diretório inexistente”, a integração do principal permanece válida: use esse perfil e não refaça o cadastro. Na seleção, deixe marcado somente o perfil utilizado. A correção para omitir perfis ainda não preparados foi acrescentada aos fontes após a alpha.2 e ainda não faz parte desse RPM.
+
 Quando o serviço solicitar autorização, use a senha e o código temporário atual do aplicativo Certisign. O segundo fator do serviço acessado, como o Google Authenticator exigido pelo GERID, continua fazendo parte do fluxo desse serviço.
 
 O aplicativo não precisa manter o painel aberto para o navegador usar a integração. Fechar o painel mantém a bandeja ativa. No GNOME, a extensão **AppIndicator and KStatusNotifierItem Support** permite exibir o ícone da bandeja.

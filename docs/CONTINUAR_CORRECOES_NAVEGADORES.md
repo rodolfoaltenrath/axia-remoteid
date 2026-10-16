@@ -2,6 +2,8 @@
 
 Atualizado em **15/10/2026**, depois do commit do ponto 6 em `cbdef29`. Os seis pontos estão commitados. O usuário solicitou retirar a instalação antiga e publicar a alpha.2 para uma instalação manual limpa. README e guia apontam para `v0.1.0-alpha.2`; confira a release no GitHub ao retomar. Este é o ponto de entrada para continuar a tarefa em outro computador. Leia também o código atual, os documentos das seis correções e `DEVELOPMENT.md`. O documento geral `../CONTINUIDADE_IA_FEDORA.md` conserva histórico anterior; as prioridades desta tarefa estão aqui.
 
+**Depois da publicação:** a release alpha.2 foi publicada sobre `19da049`. O teste manual confirmou cadastro, carteira e integração no perfil principal, mas revelou um perfil adicional sem base NSS. Uma correção posterior separa inventário e elegibilidade para configuração, mantendo perfis secundários inicializados e omitindo os ainda vazios com uma orientação. Essa correção está local, sem commit ou nova release; veja a abertura de `../CONTINUIDADE_IA_FEDORA.md` e a seção de configuração de `DEVELOPMENT.md` antes de retomar. Não repetir a desinstalação nem zerar o cadastro do usuário.
+
 ## Combinado com o usuário
 
 - Implementar **um ponto completo por vez**, na ordem 4 → 5 → 6.

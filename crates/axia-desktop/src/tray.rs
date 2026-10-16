@@ -296,7 +296,16 @@ mod tests {
         let first = lock(&root).unwrap().unwrap();
         assert!(lock(&root).unwrap().is_none());
         drop(first);
-        assert!(lock(&root).unwrap().is_some());
+        // Other parallel tests spawn processes. A fork can briefly inherit
+        // this descriptor until exec closes O_CLOEXEC, retaining its flock.
+        let deadline = Instant::now() + Duration::from_secs(2);
+        loop {
+            if lock(&root).unwrap().is_some() {
+                break;
+            }
+            assert!(Instant::now() < deadline, "resident lock was not released");
+            std::thread::sleep(Duration::from_millis(5));
+        }
         let path = root.join("axia-remotedid/tray.lock");
         std::fs::remove_file(&path).unwrap();
         let unrelated = temporary.path().join("unrelated");

@@ -109,6 +109,7 @@ fn blockers_are_typed_and_never_inferred_from_message_substrings() {
         FailureKind::BrowserOpen,
         FailureKind::ProfileBusy,
         FailureKind::InspectionUnavailable,
+        FailureKind::ProfileNotInitialized,
     ] {
         let result = TargetResult::from_registration(
             target("first"),

@@ -1,8 +1,16 @@
 # Continuidade do Axia RemotedID
 
-**Retomada atual — 15/10/2026:** os seis pontos da revisão de navegadores estão implementados e commitados, incluindo o ponto 6 em `cbdef29`. O usuário solicitou retirar a instalação antiga e publicar a alpha.2 para baixar e configurar manualmente do zero. README e guia de instalação apontam para `v0.1.0-alpha.2`; confira essa release no GitHub antes de retomar. O próximo passo é a validação manual no Fedora/GNOME. Critérios em [CONTINUAR_CORRECOES_NAVEGADORES.md](docs/CONTINUAR_CORRECOES_NAVEGADORES.md). Leia esse plano antes das próximas etapas históricas abaixo.
+**Retomada atual — 15/10/2026:** as seis correções foram commitadas até `cbdef29`, e a alpha.2 foi publicada em `v0.1.0-alpha.2`, sobre `19da049`, com RPM, pacote compactado, fontes e checksums; o link do README foi atualizado. O usuário instalou o RPM e começou a validação manual. Cadastro, carteira com dois certificados e configuração do perfil Firefox principal apareceram concluídos. Um segundo perfil, com apenas `times.json`, causou uma falha adicional. A correção de seleção descrita abaixo está local, sem commit e sem nova release; não confundi-la com o RPM publicado. Critérios originais em [CONTINUAR_CORRECOES_NAVEGADORES.md](docs/CONTINUAR_CORRECOES_NAVEGADORES.md).
 
 Estado atualizado em 15/10/2026, após concluir o ponto 6. Leia este arquivo, o [README](README.md), a [referência do protocolo](docs/PROTOCOL.md) e o código atual antes de propor alterações. Este documento substitui o antigo diário de investigação.
+
+## Correção após teste manual — perfis Firefox sem base inicializada
+
+O seletor oferecia qualquer diretório listado em `profiles.ini`, mas o registro exige `pkcs11.txt`, `cert9.db` e `key4.db`. Um perfil residual com apenas `times.json` gerava “Arquivo ou diretório inexistente”, mesmo quando o principal já estava configurado. A descoberta continua enumerando todos os perfis, enquanto a GUI e o lote CLI omitem da configuração os que ainda não têm a base completa, com orientação para abrir e fechar o perfil no navegador. O texto da seleção esclarece que são perfis. Perfis secundários inicializados permanecem disponíveis; a base Chromium continua podendo ser criada. Pedidos explícitos por perfil não inicializado recebem erro tipado com ação necessária antes de trava, backup ou NSS.
+
+Foram acrescentadas cinco regressões Rust, estendido o controlador de cancelamento/seleção com um terceiro perfil vazio e ampliado o lote NSS real para preservar esse perfil. O lote roda também quando há um RPM nativo instalado, lendo seu provedor protegido, mas mantendo conta e perfis em HOME privado de laboratório; a migração de RPM antigo continua condicionada à ausência de RPM nativo. Validação: 145 testes Rust comuns, GTK em display isolado, 21 verificações CLI, NSS real, formatação, Clippy e builds debug/release. Logs ignorados `test-results/profile-readiness-*`. Não houve alteração na conta, nos perfis reais, na instalação RPM ou nos assets publicados por esta correção. Aguardar o commit e a decisão de distribuição pelo usuário.
+
+Na repetição paralela foi observada uma falha intermitente do teste de liberação da trava da bandeja: um processo iniciado por outro teste pode herdar temporariamente o descritor entre fork e exec, apesar de O_CLOEXEC. O teste passou a aguardar a condição real por até dois segundos, mantendo a verificação de exclusão e falhando se a trava não for liberada. Não houve alteração no código de execução da bandeja.
 
 ## Correção 6 — resultados de configuração no painel
 

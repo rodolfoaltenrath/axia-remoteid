@@ -182,8 +182,11 @@ pub fn worker(module: &Path, client: &Path, home: &Path) -> Result<()> {
         println!(
             "Firefox/NSS: obsolete RPM to native user runtime, failed migration rollback, private backup and idempotence passed."
         );
-        batch_results(client, home)?;
     }
+    // Exercise batch selection even when a native system RPM is installed.
+    // Module discovery may reuse that read-only provider, but all account and
+    // profile data remain in this private laboratory HOME.
+    batch_results(client, home)?;
     for (name, bytes) in &unselected_before {
         ensure!(
             fs::read(unselected.join(name))? == *bytes,
@@ -213,6 +216,12 @@ fn batch_results(client: &Path, home: &Path) -> Result<()> {
     let root = home.join(".config/mozilla/firefox");
     let first = root.join("first");
     let second = root.join("second");
+    let unused = root.join("unused");
+    fs::create_dir_all(&unused)?;
+    lab::private_write(
+        &unused.join("times.json"),
+        b"preserve uninitialized profile",
+    )?;
     for profile in [&first, &second] {
         fs::create_dir_all(profile)?;
         for name in nss::FILES {
@@ -221,7 +230,7 @@ fn batch_results(client: &Path, home: &Path) -> Result<()> {
     }
     lab::private_write(
         &root.join("profiles.ini"),
-        b"[Profile0]\nName=A-first\nPath=first\n[Profile1]\nName=B-second\nPath=second\n",
+        b"[Profile0]\nName=A-first\nPath=first\n[Profile1]\nName=B-second\nPath=second\n[Profile2]\nName=C-unused\nPath=unused\nDefault=1\n",
     )?;
     let run = |success: bool| -> Result<Value> {
         let output = lab::capture(
@@ -245,6 +254,20 @@ fn batch_results(client: &Path, home: &Path) -> Result<()> {
                     .as_array()
                     .is_some_and(|results| results.len() == 2),
             "Relatório NSS não contém os dois perfis"
+        );
+        ensure!(
+            report["notices"]
+                .as_array()
+                .is_some_and(|notices| notices.iter().any(|notice| notice
+                    .as_str()
+                    .is_some_and(|notice| notice.contains("C-unused")
+                        && notice.contains("ainda não preparado")))),
+            "Perfil não inicializado foi omitido sem orientação"
+        );
+        ensure!(
+            fs::read_dir(&unused)?.count() == 1
+                && fs::read(unused.join("times.json"))? == b"preserve uninitialized profile",
+            "Lote tentou inicializar ou bloquear o perfil não utilizado"
         );
         Ok(report)
     };
@@ -307,7 +330,7 @@ fn batch_results(client: &Path, home: &Path) -> Result<()> {
         "Repetição do lote não foi idempotente"
     );
     println!(
-        "Firefox/NSS: structured CLI batches preserve total failure, partial success, NSS causes, rollback and idempotent retry; no cloud calls."
+        "Firefox/NSS: structured CLI batches preserve total failure, partial success, NSS causes, rollback and idempotent retry, skipping uninitialized profiles without mutation; no cloud calls."
     );
     Ok(())
 }
