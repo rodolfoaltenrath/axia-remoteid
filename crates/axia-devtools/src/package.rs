@@ -24,6 +24,7 @@ const DOCUMENTS: &[&str] = &[
     "docs/FIX_03_CONNECTION.md",
     "docs/FIX_04_FIREFOX_PROFILES.md",
     "docs/FIX_05_BROWSER_DISCOVERY.md",
+    "docs/FIX_06_BROWSER_RESULTS.md",
     "CONTINUIDADE_IA_FEDORA.md",
     "LICENSE",
     "NOTICE",

@@ -4,6 +4,7 @@ use desktopid_client::gui::{Action, ConnectionSummary, Credentials, connect_with
 use gtk::{glib, prelude::*};
 use std::{cell::Cell, rc::Rc};
 const DEFAULT_SERVER: &str = "https://remoteidcertisign.com.br";
+pub(crate) mod browser_panel;
 fn prompt_action(registered: bool) -> Result<Action> {
     if registered {
         return Ok(Action::Refresh);
@@ -190,6 +191,8 @@ pub fn run(store: &Store) -> Result<()> {
     let browsers = gtk::Button::with_label("Configurar navegadores");
     browsers.set_sensitive(state.certificate_count.is_some());
     area.append(&browsers);
+    let browser_panel = browser_panel::BrowserPanel::new();
+    area.append(&browser_panel.widget);
     if crate::browsers::module(&home).is_err() {
         let install = gtk::Button::with_label("Instalar para este usuário");
         area.append(&install);
@@ -274,17 +277,16 @@ pub fn run(store: &Store) -> Result<()> {
     let root = store.path().to_owned();
     let busy_action = busy.clone();
     let area_action = area.clone();
-    let status_action = status.clone();
+    let browser_home = home.clone();
     browsers.connect_clicked(move |_| {
         if busy_action.replace(true) {
             return;
         }
         area_action.set_sensitive(false);
-        if let Err(error) =
-            Store::new(root.clone()).and_then(|store| crate::browsers::setup_ui(&store, None))
-        {
-            status_action.set_text(&error_message(&error));
-        }
+        browser_panel.complete(
+            Store::new(root.clone()).and_then(|store| crate::browsers::setup_ui(&store, None)),
+            &browser_home,
+        );
         area_action.set_sensitive(true);
         busy_action.set(false);
     });

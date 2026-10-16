@@ -150,6 +150,22 @@ pub fn smoke(root: &Path, binary: &Path, report: &Path) -> Result<()> {
         "Inventário de navegadores criou estado ou iniciou configuração"
     );
     checks.push("browser-inventory-without-display-account-state-or-profile-creation");
+    let absent = run(
+        &missing,
+        &["setup-browsers", "--yes", "--family", "firefox"],
+        false,
+    )?;
+    let absent_report: Value = serde_json::from_slice(&absent.stdout)?;
+    ensure!(
+        absent_report["schema_version"] == 1
+            && absent_report["status"] == "no_targets"
+            && absent_report["results"] == json!([])
+            && !missing.exists()
+            && !home.join(".config").exists()
+            && !home.join(".pki").exists(),
+        "Ausência de perfis foi apresentada como sucesso ou criou estado"
+    );
+    checks.push("browser-setup-without-targets-emits-structured-report-and-fails-without-mutation");
     browser_inventory(&binary)?;
     checks.push("native-firefox-and-librewolf-inventory-from-user-path-and-quoted-desktop-without-execution");
     run(&state, &init, true)?;

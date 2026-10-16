@@ -182,6 +182,7 @@ pub fn worker(module: &Path, client: &Path, home: &Path) -> Result<()> {
         println!(
             "Firefox/NSS: obsolete RPM to native user runtime, failed migration rollback, private backup and idempotence passed."
         );
+        batch_results(client, home)?;
     }
     for (name, bytes) in &unselected_before {
         ensure!(
@@ -197,6 +198,116 @@ pub fn worker(module: &Path, client: &Path, home: &Path) -> Result<()> {
     );
     println!(
         "Firefox/NSS: load, certificate/key discovery without password callback, persistence, idempotence, private backup, rollback, conflict and unselected-profile preservation passed; no cloud calls."
+    );
+    Ok(())
+}
+
+/// Real CLI/NSS batches against private profiles: total failure, partial success,
+/// recovery and idempotent retry. The fake browser is metadata, never executed.
+fn batch_results(client: &Path, home: &Path) -> Result<()> {
+    let bin = home.join(".local/bin");
+    fs::create_dir_all(&bin)?;
+    let browser = bin.join("firefox");
+    lab::private_write(&browser, b"\x7fELFsynthetic browser; never executed")?;
+    fs::set_permissions(browser, fs::Permissions::from_mode(0o700))?;
+    let root = home.join(".config/mozilla/firefox");
+    let first = root.join("first");
+    let second = root.join("second");
+    for profile in [&first, &second] {
+        fs::create_dir_all(profile)?;
+        for name in nss::FILES {
+            lab::private_write(&profile.join(name), b"synthetic invalid database")?;
+        }
+    }
+    lab::private_write(
+        &root.join("profiles.ini"),
+        b"[Profile0]\nName=A-first\nPath=first\n[Profile1]\nName=B-second\nPath=second\n",
+    )?;
+    let run = |success: bool| -> Result<Value> {
+        let output = lab::capture(
+            lab::command(client, home)
+                .env("PATH", &bin)
+                .arg("--state-dir")
+                .arg(home.join("identity"))
+                .args(["setup-browsers", "--yes", "--family", "firefox"]),
+            std::time::Duration::from_secs(30),
+            b"",
+        )?;
+        ensure!(
+            output.status.success() == success,
+            "Exit code do lote NSS incorreto: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        let report: Value = serde_json::from_slice(&output.stdout)?;
+        ensure!(
+            report["schema_version"] == 1
+                && report["results"]
+                    .as_array()
+                    .is_some_and(|results| results.len() == 2),
+            "Relatório NSS não contém os dois perfis"
+        );
+        Ok(report)
+    };
+    let failed = run(false)?;
+    ensure!(
+        failed["status"] == "failed",
+        "Lote com todas as falhas foi considerado sucesso"
+    );
+    for result in failed["results"].as_array().unwrap() {
+        ensure!(
+            result["status"] == "failed"
+                && result["failure"]["recovery"]["state"] == "restored"
+                && result["failure"]["message"]
+                    .as_str()
+                    .is_some_and(|message| message.contains("NSS")),
+            "Falha NSS perdeu a causa ou o resultado da restauração"
+        );
+        let profile = Path::new(result["target"]["database"].as_str().unwrap());
+        for name in nss::FILES {
+            ensure!(
+                fs::read(profile.join(name))? == b"synthetic invalid database",
+                "Rollback do lote não restaurou a base"
+            );
+        }
+    }
+    let initialize = |profile: &Path| -> Result<()> {
+        for name in nss::FILES {
+            fs::remove_file(profile.join(name))?;
+        }
+        nss::Database::open(profile)?.close()
+    };
+    // Keep the first target failing; the second must still be configured.
+    initialize(&second)?;
+    let partial = run(false)?;
+    ensure!(
+        partial["status"] == "partial"
+            && partial["results"][0]["status"] == "failed"
+            && partial["results"][1]["status"] == "configured"
+            && partial["results"][1]["registration"]["registered_now"] == true,
+        "Lote não conservou o sucesso depois da falha do primeiro perfil"
+    );
+    let saved = fs::read(second.join("pkcs11.txt"))?;
+    initialize(&first)?;
+    let complete = run(true)?;
+    ensure!(
+        complete["status"] == "configured"
+            && complete["results"][0]["registration"]["registered_now"] == true
+            && complete["results"][1]["registration"]["registered_now"] == false
+            && fs::read(second.join("pkcs11.txt"))? == saved,
+        "Nova tentativa duplicou o registro existente ou perdeu um alvo"
+    );
+    let repeated = run(true)?;
+    ensure!(
+        repeated["results"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|entry| entry["registration"]["registered_now"] == false
+                && entry["registration"]["backup_directory"].is_null()),
+        "Repetição do lote não foi idempotente"
+    );
+    println!(
+        "Firefox/NSS: structured CLI batches preserve total failure, partial success, NSS causes, rollback and idempotent retry; no cloud calls."
     );
     Ok(())
 }

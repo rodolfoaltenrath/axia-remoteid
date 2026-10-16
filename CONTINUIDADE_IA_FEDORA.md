@@ -1,8 +1,14 @@
 # Continuidade do Axia RemotedID
 
-**Retomada atual — 15/10/2026:** os pontos 1 a 5 da revisão de navegadores estão implementados. O ponto 4 foi commitado em `488ed1a`; o ponto 5 foi concluído sobre essa revisão e aguarda commit pelo usuário. O próximo é o ponto 6, cujos critérios e fluxo de commits estão em [CONTINUAR_CORRECOES_NAVEGADORES.md](docs/CONTINUAR_CORRECOES_NAVEGADORES.md). Leia esse plano antes das próximas etapas históricas abaixo. O teste manual no Fedora GNOME continua previsto para depois dos seis pontos.
+**Retomada atual — 15/10/2026:** os seis pontos da revisão de navegadores estão implementados. O ponto 5 foi commitado em `b023562`; o ponto 6 foi concluído sobre essa revisão e aguarda commit pelo usuário. O próximo passo é a validação manual no Fedora/GNOME. Critérios e fluxo de commits em [CONTINUAR_CORRECOES_NAVEGADORES.md](docs/CONTINUAR_CORRECOES_NAVEGADORES.md). Leia esse plano antes das próximas etapas históricas abaixo.
 
-Estado atualizado em 15/10/2026, após concluir o ponto 5. Leia este arquivo, o [README](README.md), a [referência do protocolo](docs/PROTOCOL.md) e o código atual antes de propor alterações. Este documento substitui o antigo diário de investigação.
+Estado atualizado em 15/10/2026, após concluir o ponto 6. Leia este arquivo, o [README](README.md), a [referência do protocolo](docs/PROTOCOL.md) e o código atual antes de propor alterações. Este documento substitui o antigo diário de investigação.
+
+## Correção 6 — resultados de configuração no painel
+
+O painel mostra o último resultado por navegador/perfil durante a sessão da janela, separado do estado da conta. Distingue configuração concluída, ação necessária e falha; conserva os sucessos dos demais alvos, atualiza o perfil correto na repetição e não apresenta restauração suspensa como concluída. Cancelamento e ausência de alvos preservam os resultados anteriores. A instrução de reabrir navegadores exige sucesso em pelo menos um alvo da tentativa. O lote CLI `setup-browsers --yes` agora retorna relatório JSON versionado e tenta todos os alvos, com código de falha para resultados parciais; `--list` e `setup-firefox --yes` mantêm os contratos anteriores. Detalhes em [FIX_06_BROWSER_RESULTS.md](docs/FIX_06_BROWSER_RESULTS.md).
+
+Validação: 140 testes Rust comuns, GTK em display privado, 21 verificações CLI, NSS real com lotes de falha total/sucesso parcial/recuperação/repetição idempotente, formatação, Clippy, builds debug/release e publicação. Logs ignorados `test-results/fix06-*`. Não houve alteração da instalação real, acesso à conta ou release. O ponto 6 aguarda commit pelo usuário; a validação manual das seis correções no Fedora/GNOME continua pendente. O RPM público continua sendo a alpha.1.
 
 ## Correção 5 — descoberta de navegadores nativos
 

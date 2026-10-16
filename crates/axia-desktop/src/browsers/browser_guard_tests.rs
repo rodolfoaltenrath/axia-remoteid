@@ -20,9 +20,12 @@ fn running_chromium_refuses_before_creating_any_database_or_backup() {
     };
     let module = laboratory_module(home.path());
     let error = register_with(&target, &module, home.path(), false, || Ok(true))
-        .err()
-        .expect("running browser must prevent registration");
+        .expect_err("running browser must prevent registration");
     assert!(error.to_string().contains("Feche os navegadores"));
+    assert_eq!(
+        error.downcast_ref::<Blocked>().unwrap().0,
+        FailureKind::BrowserOpen
+    );
     assert!(!home.path().join(".pki").exists());
     assert!(!home.path().join(".local").exists());
 }
@@ -45,11 +48,13 @@ fn unreadable_process_inventory_preserves_existing_database_and_permissions() {
         installations: Vec::new(),
     };
     let module = laboratory_module(home.path());
-    assert!(
-        register_with(&target, &module, home.path(), false, || {
-            anyhow::bail!("laboratory procfs unavailable")
-        })
-        .is_err()
+    let error = register_with(&target, &module, home.path(), false, || {
+        anyhow::bail!("laboratory procfs unavailable")
+    })
+    .unwrap_err();
+    assert_eq!(
+        error.downcast_ref::<Blocked>().unwrap().0,
+        FailureKind::InspectionUnavailable
     );
     assert_eq!(fs::metadata(&database).unwrap().mode() & 0o777, 0o750);
     assert!(!database.join(".axia-integration.lock").exists());
@@ -78,10 +83,16 @@ fn browser_starting_after_backup_is_detected_before_nss_can_write() {
         checks += 1;
         Ok(checks == 2)
     })
-    .err()
-    .expect("browser starting before NSS initialization must prevent registration");
+    .expect_err("browser starting before NSS initialization must prevent registration");
     assert_eq!(checks, 2);
-    assert!(error.to_string().contains("Feche os navegadores"));
+    assert!(format!("{error:#}").contains("Feche os navegadores"));
+    assert_eq!(
+        error.downcast_ref::<Blocked>().unwrap().0,
+        FailureKind::BrowserOpen
+    );
+    let recovery = error.downcast_ref::<Recovery>().unwrap();
+    assert_eq!(recovery.state, RecoveryState::NotNeeded);
+    assert!(recovery.backup_directory.is_dir());
     assert!(target.database.join(".axia-integration.lock").is_file());
     for name in FILES {
         assert!(
@@ -108,14 +119,16 @@ fn browser_starting_during_nss_initialization_suspends_mutation_and_rollback() {
         checks += 1;
         Ok(checks >= 3)
     })
-    .err()
-    .expect("browser starting during NSS initialization must prevent module registration");
+    .expect_err("browser starting during NSS initialization must prevent module registration");
     assert_eq!(checks, 4);
-    assert!(
-        error
-            .to_string()
-            .contains("Restauração automática suspensa")
-    );
+    let entry = report::TargetResult::from_registration(target.clone(), Err(error));
+    assert_eq!(entry.status, report::TargetStatus::NeedsAction);
+    let failure = entry.failure.as_ref().unwrap();
+    let recovery = failure.recovery.as_ref().unwrap();
+    assert_eq!(recovery.state, RecoveryState::Suspended);
+    assert!(recovery.backup_directory.is_dir());
+    assert!(failure.message.contains("Restauração automática suspensa"));
+    assert!(!failure.message.contains("foi restaurada"));
     assert!(target.database.join("cert9.db").exists());
     assert!(registered_library(&target.database).unwrap().is_none());
     let backup_root = home

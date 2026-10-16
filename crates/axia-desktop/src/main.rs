@@ -384,25 +384,28 @@ fn run(cli: Cli) -> Result<()> {
             return Ok(());
         }
         if !yes {
-            return axia_desktop::browsers::setup_ui(&store, None);
+            let report = axia_desktop::browsers::setup_ui(&store, None)?;
+            axia_desktop::ui::message(&report.message(&home));
+            return Ok(());
         }
-        let module = axia_desktop::browsers::module(&home)?;
         let targets: Vec<_> = inventory
             .targets
             .iter()
             .filter(|target| family.is_none_or(|family| family == target.family))
+            .cloned()
             .collect();
+        let mut report = if targets.is_empty() {
+            axia_desktop::browsers::report::SetupReport::from_results(Vec::new())
+        } else {
+            let module = axia_desktop::browsers::module(&home)?;
+            axia_desktop::browsers::report::configure(targets, &module, &home, |_| {})
+        };
+        report.notices = inventory.notices;
+        println!("{}", serde_json::to_string_pretty(&report)?);
         ensure!(
-            !targets.is_empty(),
-            "Nenhum navegador nativo disponível para configurar"
+            report.successful(),
+            "Configuração incompleta; consulte os resultados por alvo acima"
         );
-        let mut results = Vec::new();
-        for target in targets {
-            results.push(axia_desktop::browsers::register(
-                target, &module, &home, true,
-            )?);
-        }
-        println!("{}", serde_json::to_string_pretty(&results)?);
         return Ok(());
     }
     if let Command::SetupFirefox {
@@ -413,7 +416,9 @@ fn run(cli: Cli) -> Result<()> {
     } = command
     {
         if !yes {
-            return axia_desktop::browsers::setup_ui(&store, profile);
+            let report = axia_desktop::browsers::setup_ui(&store, profile)?;
+            axia_desktop::ui::message(&report.message(&axia_desktop::desktop::home()?));
+            return Ok(());
         }
         let home = home.unwrap_or(axia_desktop::desktop::home()?);
         let module = match module {

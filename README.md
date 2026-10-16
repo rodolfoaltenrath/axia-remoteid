@@ -15,6 +15,7 @@ A próxima alpha traz uma interface nativa e configuração dos navegadores já 
 - **Conexão com a conta:** cadastro do computador e atualização dos certificados pela interface gráfica.
 - **Integração com o Firefox:** disponibilização dos certificados para serviços que oferecem autenticação por certificado digital.
 - **Detecção de navegadores na alpha.2:** preparação dos perfis Firefox e LibreWolf e da base de certificados dos navegadores Chromium encontrados no computador, com escolha pelo usuário.
+- **Acompanhamento na alpha.2:** resultados por navegador e perfil no painel, com orientação quando uma configuração precisa de atenção.
 - **Autorização pelo usuário:** solicitação de senha e código temporário do aplicativo Certisign quando uma operação exige autorização.
 - **Sessão temporária:** recurso de reutilização da autorização por até dez minutos no mesmo aplicativo e certificado, para reduzir solicitações repetidas.
 - **Inicialização opcional:** escolha, na primeira abertura, de iniciar o aplicativo ao entrar na sessão do Fedora.

@@ -96,7 +96,7 @@ pub fn smoke(root: &Path, target: &Path) -> Result<()> {
         "Teste GTK criou identidade"
     );
     println!(
-        "Native GTK: private display, cancellation, password buffers, responsive worker and saved-registration recovery passed; no account access."
+        "Native GTK: private display, cancellation, password buffers, responsive worker, saved-registration recovery and per-profile browser results passed; no account access."
     );
     Ok(())
 }

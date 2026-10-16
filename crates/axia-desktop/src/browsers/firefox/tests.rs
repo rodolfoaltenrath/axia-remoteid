@@ -267,14 +267,8 @@ fn cancelling_preserves_both_profiles_and_confirming_only_passes_selected_second
         }])
         .unwrap();
     let wallet_before = fs::read(store.path().join("wallet.json")).unwrap();
-    let prepare = || {
-        Ok((
-            home.path().to_owned(),
-            home.path().join("unused.so"),
-            discover(home.path()),
-        ))
-    };
-    assert!(
+    let prepare = || Ok((home.path().to_owned(), discover(home.path())));
+    assert_eq!(
         setup_with(
             &store,
             None,
@@ -283,10 +277,11 @@ fn cancelling_preserves_both_profiles_and_confirming_only_passes_selected_second
                 assert_eq!(choices.len(), 2);
                 None
             },
-            |_, _, _| panic!("cancel must not configure any profile")
+            |_, _| panic!("cancel must not configure any profile")
         )
         .unwrap()
-        .is_none()
+        .status,
+        super::super::SetupStatus::Cancelled
     );
     for directory in ["main", "work"] {
         for name in super::super::FILES {
@@ -309,14 +304,14 @@ fn cancelling_preserves_both_profiles_and_confirming_only_passes_selected_second
                     .unwrap(),
             ])
         },
-        |selected, _, _| {
+        |selected, _| {
             assert_eq!(selected.len(), 1);
             assert_eq!(selected[0].database, root.join("work"));
             fs::write(
                 selected[0].database.join("pkcs11.txt"),
                 b"selected profile only",
             )?;
-            Ok(vec!["synthetic worker completed".into()])
+            Ok(super::super::SetupReport::from_results(Vec::new()))
         },
     )
     .unwrap();

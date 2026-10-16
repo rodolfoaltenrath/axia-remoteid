@@ -22,6 +22,8 @@ use std::{
 mod chromium;
 mod discovery;
 mod firefox;
+pub mod report;
+use report::{Blocked, FailureKind, Recovery, RecoveryState, SetupReport, SetupStatus};
 
 pub const MODULE_NAME: &str = "DesktopID Linux Alpha";
 pub use crate::installation::runtime::SYSTEM_MODULE;
@@ -347,10 +349,17 @@ fn profile_lock(database: &Path, family: Family) -> Result<File> {
     };
     // Firefox uses this exact fcntl lock. For Chromium this coordinates Axia
     // instances only: Chromium does not honor .axia-integration.lock.
-    ensure!(
-        unsafe { libc::fcntl(file.as_raw_fd(), libc::F_SETLK, &mut lock) } != -1,
-        "Feche o navegador: a base de certificados está em uso"
-    );
+    if unsafe { libc::fcntl(file.as_raw_fd(), libc::F_SETLK, &mut lock) } == -1 {
+        let error = std::io::Error::last_os_error();
+        return Err(
+            if matches!(error.raw_os_error(), Some(libc::EACCES | libc::EAGAIN)) {
+                anyhow::Error::new(error).context(Blocked(FailureKind::ProfileBusy))
+            } else {
+                anyhow::Error::new(error)
+                    .context("Não foi possível bloquear a base de certificados")
+            },
+        );
+    }
     let legacy = database.join("lock");
     if family == Family::Firefox && legacy.is_symlink() {
         ensure!(
@@ -359,7 +368,7 @@ fn profile_lock(database: &Path, family: Family) -> Result<File> {
                 .as_bytes()
                 .windows(2)
                 .any(|part| part == b":+"),
-            "Feche o Firefox: há um bloqueio legado no perfil"
+            Blocked(FailureKind::ProfileBusy)
         );
     }
     Ok(file)
@@ -543,7 +552,7 @@ impl Drop for Database {
     }
 }
 
-#[derive(Serialize)]
+#[derive(Clone, Debug, Serialize)]
 pub struct Registration {
     pub browser: Family,
     pub profile: PathBuf,
@@ -568,8 +577,8 @@ pub fn register(
 fn require_closed(family: Family, running: &mut impl FnMut() -> Result<bool>) -> Result<()> {
     if family == Family::Chromium {
         ensure!(
-            !running()?,
-            "Feche os navegadores baseados em Chromium antes de configurar os certificados"
+            !running().context(Blocked(FailureKind::InspectionUnavailable))?,
+            Blocked(FailureKind::BrowserOpen)
         );
     }
     Ok(())
@@ -581,11 +590,19 @@ fn restore_closed(
     family: Family,
     running: &mut impl FnMut() -> Result<bool>,
 ) -> Result<()> {
-    require_closed(family, running).context(
-        "Restauração automática suspensa: feche os navegadores; o backup privado foi preservado",
-    )?;
-    restore(database, backup)
-        .context("Não foi possível restaurar a configuração; o backup privado foi preservado")
+    if let Err(error) = require_closed(family, running) {
+        let reason = error.downcast_ref::<Blocked>().map(|blocked| blocked.0);
+        return Err(error.context(Recovery {
+            state: RecoveryState::Suspended, backup_directory: backup.to_owned(), reason,
+            detail: "Restauração automática suspensa: feche os navegadores e corrija eventuais erros de inspeção; o backup privado foi preservado".into(),
+        }));
+    }
+    restore(database, backup).with_context(|| Recovery {
+        state: RecoveryState::Failed,
+        backup_directory: backup.to_owned(),
+        reason: None,
+        detail: "Não foi possível restaurar a configuração; o backup privado foi preservado".into(),
+    })
 }
 
 fn register_with(
@@ -665,7 +682,18 @@ fn register_with(
     };
     // Refuse before NSS_InitReadWrite: NSS initialization can write files too.
     // No restore is needed here because we have not opened NSS yet.
-    require_closed(target.family, &mut running)?;
+    if let Err(error) = require_closed(target.family, &mut running) {
+        return Err(if let Some(backup) = &backup {
+            error.context(Recovery {
+                state: RecoveryState::NotNeeded,
+                backup_directory: backup.clone(),
+                reason: None,
+                detail: "NSS não foi aberto nesta tentativa; a base anterior foi preservada".into(),
+            })
+        } else {
+            error
+        });
+    }
     let operation = (|| {
         let mut nss = Database::open(&database)?;
         require_closed(target.family, &mut running)?;
@@ -698,10 +726,20 @@ fn register_with(
                 if let Err(restore_error) =
                     restore_closed(&database, backup, target.family, &mut running)
                 {
-                    return Err(error.context(restore_error));
+                    // Keep both NSS and rollback causes, with a typed recovery
+                    // context so suspended restoration is never called restored.
+                    let mut recovery = restore_error
+                        .downcast_ref::<Recovery>()
+                        .cloned()
+                        .expect("restore_closed always annotates recovery failures");
+                    recovery.detail = format!("{restore_error:#}");
+                    return Err(error.context(recovery));
                 }
                 return Err(
-                    error.context("Configuração não concluída; a base anterior foi preservada")
+                    error.context(Recovery {
+                        state: RecoveryState::Restored, backup_directory: backup.clone(), reason: None,
+                        detail: "Configuração não concluída; a base anterior foi restaurada e o backup privado foi preservado".into(),
+                    })
                 );
             }
             return Err(error.context(
@@ -726,46 +764,31 @@ fn register_with(
 #[path = "browsers/browser_guard_tests.rs"]
 mod browser_guard_tests;
 
-pub fn setup_ui(store: &crate::storage::Store, profile: Option<PathBuf>) -> Result<()> {
+pub fn setup_ui(store: &crate::storage::Store, profile: Option<PathBuf>) -> Result<SetupReport> {
     desktop::user()?;
     crate::ui::init()?;
-    let message = setup_with(
+    setup_with(
         store,
         profile,
         || {
             let home = desktop::home()?;
-            let module = module(&home)?;
             let inventory = discover(&home)?;
-            Ok((home, module, inventory))
+            Ok((home, inventory))
         },
         crate::ui::choose,
-        |selected, module, home| {
+        |selected, home| {
             crate::ui::work(
                 "Configurando os navegadores selecionados...",
                 move |progress| {
-                    let mut results = Vec::new();
-                    for target in selected {
-                        progress
-                            .send(format!("Configurando {}...", target.label))
-                            .context("Interface indisponível")?;
-                        let result = register(&target, &module, &home, true);
-                        results.push(match result {
-                            Ok(report) => format!(
-                                "{}: configurado; {} certificado(s) disponível(is).",
-                                target.label, report.certificate_count
-                            ),
-                            Err(error) => format!("{}: {}", target.label, error),
-                        });
-                    }
-                    Ok(results)
+                    let module = module(&home)?;
+                    Ok(report::configure(selected, &module, &home, |target| {
+                        // Progress delivery must not discard completed registrations.
+                        let _ = progress.send(format!("Configurando {}...", target.label));
+                    }))
                 },
             )
         },
-    )?;
-    if let Some(message) = message {
-        crate::ui::message(&message);
-    }
-    Ok(())
+    )
 }
 
 // Keep the workflow under test while replacing only the graphical boundary.
@@ -773,15 +796,15 @@ pub fn setup_ui(store: &crate::storage::Store, profile: Option<PathBuf>) -> Resu
 fn setup_with(
     store: &crate::storage::Store,
     profile: Option<PathBuf>,
-    prepare: impl FnOnce() -> Result<(PathBuf, PathBuf, Inventory)>,
+    prepare: impl FnOnce() -> Result<(PathBuf, Inventory)>,
     choose: impl FnOnce(&str, &[String]) -> Option<Vec<usize>>,
-    configure: impl FnOnce(Vec<Target>, PathBuf, PathBuf) -> Result<Vec<String>>,
-) -> Result<Option<String>> {
+    configure: impl FnOnce(Vec<Target>, PathBuf) -> Result<SetupReport>,
+) -> Result<SetupReport> {
     ensure!(
         store.load_wallet_public().is_ok(),
         "Conecte sua conta e atualize os certificados antes de configurar os navegadores"
     );
-    let (home, module, inventory) = prepare()?;
+    let (home, inventory) = prepare()?;
     let targets = if let Some(database) = profile {
         vec![Target {
             family: Family::Firefox,
@@ -795,24 +818,33 @@ fn setup_with(
         inventory.targets
     };
     if targets.is_empty() {
-        return Ok(Some(inventory.notices.join("\n")));
+        return Ok(SetupReport::empty(
+            SetupStatus::NoTargets,
+            inventory.notices,
+        ));
     }
     let mut text = String::from(
         "Feche os navegadores antes de continuar. Selecione onde deseja disponibilizar seus certificados.\nO Axia configura os navegadores instalados; nenhum navegador será instalado.",
     );
-    for notice in inventory.notices {
+    for notice in &inventory.notices {
         text.push('\n');
-        text.push_str(&notice);
+        text.push_str(notice);
     }
     let choices: Vec<_> = targets
         .iter()
         .map(|target| target.selection_label(&home))
         .collect();
     let Some(selected) = choose(&text, &choices) else {
-        return Ok(None);
+        return Ok(SetupReport::empty(
+            SetupStatus::Cancelled,
+            inventory.notices,
+        ));
     };
     if selected.is_empty() {
-        return Ok(None);
+        return Ok(SetupReport::empty(
+            SetupStatus::Cancelled,
+            inventory.notices,
+        ));
     }
     let selected: Vec<_> = selected
         .into_iter()
@@ -823,11 +855,9 @@ fn setup_with(
                 .context("Seleção de navegador inválida")
         })
         .collect::<Result<_>>()?;
-    let results = configure(selected, module, home)?;
-    Ok(Some(format!(
-        "{}\n\nReabra os navegadores configurados e escolha a entrada com certificado digital no serviço desejado.",
-        results.join("\n\n")
-    )))
+    let mut report = configure(selected, home)?;
+    report.notices = inventory.notices;
+    Ok(report)
 }
 
 #[cfg(test)]
@@ -871,7 +901,7 @@ mod tests {
             None,
             || panic!("must not inspect a browser without an account"),
             |_, _| panic!("must not ask to register a browser"),
-            |_, _, _| panic!("must not register a browser"),
+            |_, _| panic!("must not register a browser"),
         )
         .unwrap_err();
         assert!(error.to_string().contains("Conecte sua conta"));
@@ -926,7 +956,6 @@ mod tests {
                 || {
                     Ok((
                         home.to_owned(),
-                        home.join("unused-module.so"),
                         Inventory {
                             installed: vec!["Firefox".into()],
                             targets: Vec::new(),
@@ -939,7 +968,7 @@ mod tests {
                     assert_eq!(choices, &["Firefox\n~/profile"]);
                     selection
                 },
-                |_, _, _| panic!("cancelled, empty or invalid selection must not enter NSS"),
+                |_, _| panic!("cancelled, empty or invalid selection must not enter NSS"),
             );
             if invalid {
                 assert!(
@@ -949,7 +978,7 @@ mod tests {
                         .contains("Seleção de navegador inválida")
                 );
             } else {
-                assert!(result.unwrap().is_none());
+                assert_eq!(result.unwrap().status, SetupStatus::Cancelled);
             }
             for name in FILES {
                 assert_eq!(
@@ -967,6 +996,31 @@ mod tests {
             }
             assert!(!home.join(".local/state").exists());
         }
+        let report = setup_with(
+            &store,
+            None,
+            || {
+                Ok((
+                    home.to_owned(),
+                    Inventory {
+                        installed: Vec::new(),
+                        targets: Vec::new(),
+                        notices: vec!["Nenhum navegador nativo encontrado".into()],
+                        ambiguous_firefox_profiles: false,
+                    },
+                ))
+            },
+            |_, _| panic!("no targets must not show selection"),
+            |_, _| panic!("no targets must not select a module or enter NSS"),
+        )
+        .unwrap();
+        assert_eq!(report.status, SetupStatus::NoTargets);
+        assert!(
+            report
+                .summary()
+                .contains("Nenhum navegador nativo encontrado")
+        );
+        assert!(!home.join(".local/state").exists());
     }
 
     #[test]
@@ -1039,6 +1093,10 @@ mod tests {
             .unwrap();
         let error = profile_lock(profile, Family::Firefox).unwrap_err();
         assert!(error.to_string().contains("em uso"));
+        assert_eq!(
+            error.downcast_ref::<Blocked>().unwrap().0,
+            FailureKind::ProfileBusy
+        );
         assert!(child.0.try_wait().unwrap().is_none());
         child.0.stdin.take().unwrap().write_all(b"x").unwrap();
         assert!(child.0.wait().unwrap().success());
