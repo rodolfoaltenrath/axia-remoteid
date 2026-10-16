@@ -1,12 +1,12 @@
 # Continuidade: validar as seis correções dos navegadores
 
-Atualizado em **15/10/2026**, depois de implementar o ponto 6 sobre `b023562`. Os pontos 1 a 5 estão commitados; o ponto 6 está pronto para revisão e commit pelo usuário. Este é o ponto de entrada para continuar a tarefa em outro computador. Leia também o código atual, os documentos das seis correções e `DEVELOPMENT.md`. O documento geral `../CONTINUIDADE_IA_FEDORA.md` conserva histórico anterior; as prioridades desta tarefa estão aqui.
+Atualizado em **15/10/2026**, depois do commit do ponto 6 em `cbdef29`. Os seis pontos estão commitados. O usuário solicitou retirar a instalação antiga e publicar a alpha.2 para uma instalação manual limpa. README e guia apontam para `v0.1.0-alpha.2`; confira a release no GitHub ao retomar. Este é o ponto de entrada para continuar a tarefa em outro computador. Leia também o código atual, os documentos das seis correções e `DEVELOPMENT.md`. O documento geral `../CONTINUIDADE_IA_FEDORA.md` conserva histórico anterior; as prioridades desta tarefa estão aqui.
 
 ## Combinado com o usuário
 
 - Implementar **um ponto completo por vez**, na ordem 4 → 5 → 6.
 - Concluir implementação, regressões e documentação; preparar somente as alterações daquele ponto e sugerir a mensagem de commit.
-- **O usuário executa os commits.** Não fazer commit, push ou release automaticamente. Depois do commit confirmado, passar ao ponto seguinte.
+- **O usuário executa os commits das correções.** Esses commits já foram feitos até o ponto 6. A preparação e publicação da release alpha.2 foram autorizadas posteriormente, incluindo guia e link de download; não estender essa autorização a novos ciclos de desenvolvimento.
 - O trabalho atual está no Fedora. O usuário decidiu fazer a validação manual no **Fedora e GNOME depois de concluir os seis pontos**. Continuar a validação automatizada sem exigir esse teste manual a cada ponto.
 - O aplicativo detecta navegadores já instalados. **Não instalar navegadores** como requisito ou efeito do projeto.
 - A configuração automática acontece quando o usuário clica em **Configurar navegadores**, escolhe os alvos e confirma. Não transformar isso em alterações silenciosas durante a instalação ou a inicialização.
@@ -14,7 +14,7 @@ Atualizado em **15/10/2026**, depois de implementar o ponto 6 sobre `b023562`. O
 
 ## Estado confirmado ao escrever este documento
 
-O ponto 5 foi commitado e enviado em `b023562`. O ponto 6 começou com o diretório de trabalho limpo, sobre essa revisão, e seu código e documentação aguardam commit pelo usuário:
+O ponto 5 foi commitado e enviado em `b023562`. O ponto 6 começou com o diretório de trabalho limpo sobre essa revisão e foi commitado e enviado pelo usuário em `cbdef29`:
 
 | Ponto | Situação | Commit | Documento |
 | --- | --- | --- | --- |
@@ -23,11 +23,11 @@ O ponto 5 foi commitado e enviado em `b023562`. O ponto 6 começou com o diretó
 | 3. Tela após cadastro salvo e consulta de carteira falha | Concluído | `b0667ca` | [FIX_03_CONNECTION.md](FIX_03_CONNECTION.md) |
 | 4. Perfis secundários Firefox | Concluído | `488ed1a` | [FIX_04_FIREFOX_PROFILES.md](FIX_04_FIREFOX_PROFILES.md) |
 | 5. Derivados Firefox e executáveis fora de `/usr/bin` | Concluído | `b023562` | [FIX_05_BROWSER_DISCOVERY.md](FIX_05_BROWSER_DISCOVERY.md) |
-| 6. Resultados por alvo no painel | **Implementado; aguardando commit** | — | [FIX_06_BROWSER_RESULTS.md](FIX_06_BROWSER_RESULTS.md) |
+| 6. Resultados por alvo no painel | Concluído | `cbdef29` | [FIX_06_BROWSER_RESULTS.md](FIX_06_BROWSER_RESULTS.md) |
 
 A migração dos testes Python para Rust também está no histórico atual. Não recriar a suíte Python. O fixture público `python-vectors.json` é intencional e permanece como referência sintética; não alterar seu conteúdo nem relaxar a exceção de hash para publicar outros arquivos privados.
 
-Os pontos 1 a 5 e a conciliação já estavam no histórico remoto ao iniciar o ponto 6. O ponto 6 ainda não foi commitado ou enviado. Nenhuma nova release foi publicada por estas correções.
+Os seis pontos e a conciliação estão no histórico remoto. A publicação da alpha.2 e a instalação limpa foram solicitadas posteriormente pelo usuário; essa autorização não inclui executar login, cadastro ou assinatura real automaticamente.
 
 ## O que o projeto faz
 
@@ -194,4 +194,4 @@ As seis correções não acessaram conta real, cadastraram computador ou solicit
 
 ## Instrução curta para a próxima IA
 
-> Leia este documento, `CONTINUIDADE_IA_FEDORA.md`, os seis documentos `docs/FIX_*.md` e o código atual. As seis correções estão implementadas; os pontos 1 a 5 estão commitados e o ponto 6 aguarda meu commit. Verifique o estado do Git antes de prosseguir. A próxima etapa é validar a nova build no Fedora/GNOME, preservando a identidade e os perfis reais. Não recrie implementações já concluídas, não instale navegadores e não execute autenticações ou assinaturas reais automaticamente. Eu farei o commit; não faça commit, push ou release por conta própria.
+> Leia este documento, `CONTINUIDADE_IA_FEDORA.md`, os seis documentos `docs/FIX_*.md` e o código atual. As seis correções estão implementadas e commitadas até `cbdef29`. Verifique o estado do Git e a release `v0.1.0-alpha.2` antes de prosseguir. Solicitei retirar a instalação antiga e publicar essa versão para baixar e configurar manualmente do zero. Preserve as cópias privadas fora do Git. A próxima etapa é validar a instalação e o fluxo real no Fedora/GNOME. Não recrie implementações concluídas, não instale navegadores nem execute autenticações ou assinaturas reais automaticamente. Novos commits e publicações fora da preparação desta release exigem instrução minha.

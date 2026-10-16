@@ -2,13 +2,13 @@
 
 **Certificados digitais em nuvem no Linux.**
 
-**[Baixar RPM — Fedora 44 x86_64](https://github.com/rodolfoaltenrath/axia-remoteid/releases/download/v0.1.0-alpha.1/axia-remotedid-0.1.0-0.1.alpha1.fc44.x86_64.rpm)** · **[Guia de instalação e testes](docs/TESTING.md)**
+**[Baixar RPM — Fedora 44 x86_64](https://github.com/rodolfoaltenrath/axia-remoteid/releases/download/v0.1.0-alpha.2/axia-remotedid-0.1.0-0.2.alpha2.fc44.x86_64.rpm)** · **[Guia de instalação e testes](docs/TESTING.md)**
 
 O Axia RemotedID conecta certificados em nuvem da Certisign a aplicações Linux compatíveis. Com uma interface gráfica, permite cadastrar o computador, consultar os certificados da conta e autorizar seu uso em autenticação e operações de assinatura digital.
 
 A solução atende profissionais e organizações que precisam acessar serviços com certificado digital em um ambiente Linux. A versão atual está em **fase alpha**, com foco no Fedora e no Firefox nativo.
 
-A próxima alpha traz uma interface nativa e configuração dos navegadores já instalados, sem executar Python ou Zenity e sem instalar navegador junto. A versão pública para download continua sendo a **alpha.1**; as novidades da **alpha.2** estão em validação.
+A **alpha.2** está disponível para testes, com interface nativa e configuração dos navegadores já instalados, sem executar Python ou Zenity e sem instalar navegador junto. Os novos fluxos passaram na validação automatizada; a homologação de uso real desta pré-versão continua em andamento.
 
 ## Principais recursos
 
@@ -32,7 +32,7 @@ A chave privada do certificado permanece no serviço em nuvem. Senhas e códigos
 
 A sessão temporária mantém apenas o token de autorização em memória, com prazo limitado e separado por aplicativo e certificado. Fechar o navegador ou encerrar a sessão do dispositivo elimina essa autorização local. O serviço em nuvem pode exigir uma nova autorização antes do prazo; a reutilização por dez minutos passou nos testes locais e ainda está em validação no acesso real.
 
-A inicialização automática mantém o aplicativo na bandeja, sem abrir janela ou aparecer na dock. O menu permite abrir o aplicativo, consultar a quantidade de certificados salvos, alterar a inicialização e sair. A conexão com a conta e as autorizações dependem de uma ação do usuário. Esse comportamento está na build de desenvolvimento; o RPM alpha.1 publicado ainda exibe a mensagem de inicialização.
+A inicialização automática mantém o aplicativo na bandeja, sem abrir janela ou aparecer na dock. O menu permite abrir o aplicativo, consultar a quantidade de certificados salvos, alterar a inicialização e sair. A conexão com a conta e as autorizações dependem de uma ação do usuário.
 
 ## Compatibilidade
 

@@ -1,95 +1,96 @@
-# Testar o Axia RemotedID Alpha
+# Instalar e testar o Axia RemotedID Alpha 2
 
-Este pacote contém o aplicativo compilado para **Fedora 44 x86_64**, com interface gráfica e integração com o Firefox nativo. Não é necessário instalar Rust ou compilar o projeto. Cada pessoa conecta sua própria conta Certisign; o pacote não inclui certificados ou dados de nenhuma conta.
+O Axia RemotedID conecta seus certificados em nuvem da Certisign a aplicações Linux compatíveis. Esta pré-versão é destinada ao **Fedora 44 x86_64**, com sessão gráfica. O pacote contém o aplicativo compilado; você não precisa instalar Rust nem executar scripts de desenvolvimento.
 
-## Próxima versão: alpha.2 nativa
+**[Baixar o RPM](https://github.com/rodolfoaltenrath/axia-remoteid/releases/download/v0.1.0-alpha.2/axia-remotedid-0.1.0-0.2.alpha2.fc44.x86_64.rpm)** · **[Downloads e checksum](https://github.com/rodolfoaltenrath/axia-remoteid/releases/tag/v0.1.0-alpha.2)**
 
-A alpha.2 está em teste local e ainda não substitui o download público da alpha.1. Seu RPM se chama `axia-remotedid-0.1.0-0.2.alpha2.fc44.x86_64.rpm`.
+A alpha.2 usa uma interface nativa, bandeja e configuração de navegadores com resultados por perfil. O aplicativo não executa Python ou Zenity. Não instala navegadores: identifica instalações nativas compatíveis já existentes. As bibliotecas do Fedora são instaladas automaticamente pelo gerenciador de pacotes.
 
-Essa versão usa um painel nativo e não executa Python ou Zenity. Não instala Firefox nem Chromium: detecta os navegadores nativos já presentes e oferece **Configurar navegadores**, permitindo selecionar Firefox, a família Chromium ou ambos. As bibliotecas necessárias do Fedora são resolvidas pelo RPM; GTK/GStreamer podem trazer Python indiretamente para ferramentas do sistema.
+## Antes de começar
 
-Depois de instalar, abra **Axia RemotedID Alpha**, conecte ou atualize a conta e clique em **Configurar navegadores**, com os navegadores escolhidos fechados. O registro mantém backup e preserva módulos de outros aplicativos. No primeiro uso, escolha se deseja iniciar com o sistema; os próximos logins ficam somente na bandeja. Fechar a interface mantém a bandeja ativa.
+- Use Fedora 44 de 64 bits, com sessão gráfica. O foco de validação é GNOME.
+- Tenha um navegador nativo compatível e pelo menos um perfil criado. Se nunca o utilizou, abra e feche o navegador uma vez.
+- Tenha uma conta Certisign com certificado em nuvem e acesso ao aplicativo que fornece seu código temporário.
+- Feche os navegadores antes de configurar a integração.
 
-Firefox já foi confirmado em uso real na versão anterior. Chromium passou em autenticação de laboratório com TLS 1.2 e dados sintéticos; o fluxo real com Certisign ainda precisa de teste. Chrome, Brave, Edge, Vivaldi e Opera são detectados, mas cada distribuição precisa de validação própria. A configuração Flatpak ainda não está disponível.
+Firefox foi confirmado em acesso real na versão anterior. Os testes automatizados da alpha.2 cobrem o novo fluxo local; o uso real desta versão ainda precisa de validação. LibreWolf, Chromium e seus derivados têm os limites descritos adiante.
 
-Para a alpha.2 compactada, abra o executável `axia-remotedid` e escolha **Instalar para este usuário**. Não há instaladores Python ou shell nesse pacote. As instruções abaixo continuam destinadas à alpha.1 publicada.
+## Instalar o RPM
 
-## Requisitos da alpha.1 publicada
+1. Baixe o arquivo `axia-remotedid-0.1.0-0.2.alpha2.fc44.x86_64.rpm` na página de downloads.
+2. Abra-o no instalador de aplicativos do Fedora e confirme a instalação com sua senha do sistema.
+3. Abra **Axia RemotedID Alpha** no menu de aplicativos, como seu usuário normal.
 
-- Fedora 44 de 64 bits, com sessão gráfica. A validação foi feita no GNOME.
-- Firefox instalado pelo Fedora, com um perfil já criado. Se nunca o utilizou, abra e feche o navegador uma vez.
-- Conta Certisign com certificado em nuvem e acesso ao aplicativo de códigos temporários.
-
-## Instalar pelo RPM
-
-Baixe `axia-remotedid-0.1.0-0.1.alpha1.fc44.x86_64.rpm` e o arquivo `.rpm.sha256` que o acompanha. Na pasta dos downloads, execute:
+O Fedora resolve as dependências necessárias. Se preferir instalar pelo terminal, baixe também o arquivo `.rpm.sha256`, entre na pasta dos downloads e execute:
 
 ```bash
-sha256sum -c axia-remotedid-0.1.0-0.1.alpha1.fc44.x86_64.rpm.sha256
-sudo dnf install ./axia-remotedid-0.1.0-0.1.alpha1.fc44.x86_64.rpm
+sha256sum -c axia-remotedid-0.1.0-0.2.alpha2.fc44.x86_64.rpm.sha256
+sudo dnf install ./axia-remotedid-0.1.0-0.2.alpha2.fc44.x86_64.rpm
 ```
 
-O gerenciador de pacotes instala as dependências e adiciona **Axia RemotedID Alpha** ao menu. Depois, abra o aplicativo como seu usuário normal. Não é necessário instalar Rust ou executar scripts de compilação.
+O RPM ainda não tem assinatura de distribuição. O checksum permite conferir se o arquivo corresponde ao publicado nesta release.
 
-Para atualizar, instale o novo RPM pelo mesmo procedimento e reinicie o Firefox. Para remover o aplicativo, use `sudo dnf remove axia-remotedid`. O cadastro e as preferências da conta permanecem no seu perfil de usuário.
+## Conectar e configurar
+
+1. Na primeira abertura, escolha se deseja iniciar o Axia RemotedID com o sistema. Quando ativado, os próximos logins iniciam apenas a bandeja, sem janela nem item na dock.
+2. Clique em **Conectar conta**, informe os dados do aplicativo Certisign e confirme o cadastro deste computador.
+3. Confira a quantidade de certificados disponíveis. Se houver um cadastro local salvo, o botão será **Atualizar certificados**, reutilizando esse cadastro.
+4. Com os navegadores fechados, clique em **Configurar navegadores**.
+5. Selecione os navegadores e perfis desejados e confirme. Nenhum navegador será instalado.
+6. Confira os resultados no painel: **Configurado**, **Ação necessária** ou **Falha**. Se apenas alguns alvos falharem, corrija a causa e repita a ação nesses alvos.
+7. Reabra os navegadores configurados e acesse o serviço que oferece entrada por certificado digital.
+
+Os resultados de configuração ficam disponíveis enquanto o painel estiver aberto. Fechar a janela inicia uma nova lista na próxima abertura; os registros já feitos nos navegadores permanecem.
+
+Quando o serviço solicitar autorização, use a senha e o código temporário atual do aplicativo Certisign. O segundo fator do serviço acessado, como o Google Authenticator exigido pelo GERID, continua fazendo parte do fluxo desse serviço.
+
+O aplicativo não precisa manter o painel aberto para o navegador usar a integração. Fechar o painel mantém a bandeja ativa. No GNOME, a extensão **AppIndicator and KStatusNotifierItem Support** permite exibir o ícone da bandeja.
+
+## Navegadores e limites desta alpha
+
+| Navegador ou recurso | Situação |
+| --- | --- |
+| Firefox nativo | Configuração de todos os perfis existentes, com seleção pelo usuário; acesso real confirmado na versão anterior |
+| LibreWolf nativo | Descoberta e seleção de perfis implementadas; autenticação real pendente |
+| Chromium nativo | Autenticação TLS 1.2 testada em laboratório; uso real com Certisign pendente |
+| Chrome, Brave, Edge, Vivaldi e Opera nativos | Descoberta implementada; cada distribuição precisa de validação própria |
+| Navegadores Flatpak, Snap e AppImage | Integração não habilitada nesta versão |
+| Assinatura de PDF | Não disponível nesta versão |
+
+A autorização pode ser reutilizada por até dez minutos no mesmo aplicativo e certificado, mantendo somente o token em memória. Senhas e códigos temporários não são armazenados. O código do celular continua mudando normalmente; não é guardado nem reutilizado pelo cache. O serviço pode exigir nova autorização antes do prazo.
+
+## Atualizar, remover ou testar do zero
+
+Para atualizar, instale o novo RPM pelo mesmo procedimento, encerre o Axia RemotedID pelo menu da bandeja e reinicie os navegadores. Preserve os dados da conta: uma atualização normal não exige cadastrar novamente o computador.
+
+Para remover o aplicativo, utilize o gerenciador de aplicativos do Fedora ou:
+
+```bash
+sudo dnf remove axia-remotedid
+```
+
+A remoção do RPM preserva a identidade, o cadastro local, a carteira, as preferências e os perfis do usuário. Ela não revoga o cadastro remoto na Certisign.
+
+Um teste totalmente limpo exige também retirar a integração anterior dos navegadores, com eles fechados, e arquivar os dados locais da conta e as preferências. Preserve uma cópia privada: remover a identidade local faz o próximo login oferecer outro cadastro, sem apagar o cadastro remoto anterior. Não apague as bases de certificados ou o perfil inteiro do navegador para fazer esse teste.
 
 ## Alternativa: pacote compactado
 
-O arquivo `axia-remotedid-0.1.0-alpha.1-fedora44-x86_64.tar.gz` continua disponível para instalação apenas no seu usuário. Nesse formato, instale previamente as dependências:
+A release também oferece `axia-remotedid-0.1.0-alpha.2-fedora44-x86_64.tar.gz`. Essa alternativa instala somente no seu usuário e exige previamente as bibliotecas de execução:
 
 ```bash
-sudo dnf install python3 zenity firefox nss openssl-libs libgcc zlib ca-certificates
-sha256sum -c axia-remotedid-0.1.0-alpha.1-fedora44-x86_64.tar.gz.sha256
-tar -xzf axia-remotedid-0.1.0-alpha.1-fedora44-x86_64.tar.gz
+sudo dnf install gtk4 nss openssl-libs libgcc zlib ca-certificates
+sha256sum -c axia-remotedid-0.1.0-alpha.2-fedora44-x86_64.tar.gz.sha256
+tar -xzf axia-remotedid-0.1.0-alpha.2-fedora44-x86_64.tar.gz
 cd axia-remotedid
-sh install.sh
+./axia-remotedid
 ```
 
-Execute `sh install.sh` sem `sudo`. Para conferir os requisitos antes de instalar, use `sh install.sh --check`.
+No painel, escolha **Instalar para este usuário** e depois conecte a conta e configure os navegadores. Não há instalador Python ou shell nesse pacote. Escolha uma das formas de instalação para o teste; não é necessário instalar o RPM e o pacote compactado juntos.
 
-## Conectar sua conta
+## O que testar e como relatar
 
-1. Abra **Axia RemotedID Alpha** pelo menu de aplicativos.
-2. Escolha se deseja abrir o aplicativo ao entrar na sessão do Fedora.
-3. Informe os dados do aplicativo Certisign e clique em **Conectar e cadastrar**. Essa ação cadastra este computador na sua conta.
-4. Confirme que o aplicativo encontrou seus certificados.
+Confira a abertura pelo menu, a escolha de inicialização automática, o início silencioso na bandeja, a conexão da conta, a atualização dos certificados e a seleção dos perfis. Verifique também o cancelamento, a orientação com navegador aberto, os resultados parciais e a repetição da configuração. Depois, teste o serviço desejado com certificado e suas etapas de autorização.
 
-Se este computador já estiver cadastrado, o aplicativo oferece **Atualizar certificados**. Preserve os dados da instalação ao atualizar a alpha.
+Ao relatar um problema, informe a versão do Fedora, navegador e forma de instalação, serviço acessado, etapa e mensagem exibida. Oculte dados pessoais em capturas e caminhos locais em relatórios. Não compartilhe senha, código temporário, tokens, arquivos de identidade, carteira ou cópias privadas de recuperação.
 
-## Integrar com o Firefox
-
-No aplicativo instalado pelo RPM, a integração é oferecida após conectar sua conta. Clique em **Integrar Firefox**, com todas as janelas do navegador fechadas. Você também pode acessar **Integrar Firefox** pelo menu de contexto do atalho do aplicativo. Se houver vários perfis, selecione o desejado na janela.
-
-Se você utilizou o pacote compactado, feche todas as janelas do Firefox e execute na pasta extraída:
-
-```bash
-sh install.sh --firefox
-```
-
-Reabra o Firefox, acesse o serviço desejado e escolha a entrada com certificado digital. Selecione seu certificado e autorize a operação na janela do Axia RemotedID com a senha e o código atual do aplicativo Certisign. O segundo fator exigido pelo serviço acessado continua sendo solicitado por ele.
-
-O aplicativo não precisa permanecer aberto para essa integração funcionar. Ao atualizar os binários, reinicie o Firefox. A versão Flatpak do navegador ainda não foi validada.
-
-No pacote compactado, se o instalador informar que há vários perfis, selecione explicitamente o perfil usado:
-
-```bash
-python3 firefox_pkcs11.py --profile /caminho/absoluto/do/perfil
-```
-
-## O que testar nesta alpha
-
-- Abertura pelo menu e escolha da inicialização automática.
-- Na build de desenvolvimento: iniciar a sessão sem mensagem ou janela, abrir e sair pelo ícone da bandeja e conferir que só há um ícone mesmo após reabrir o aplicativo. No GNOME, habilite a extensão **AppIndicator and KStatusNotifierItem Support** para mostrar o ícone. O RPM alpha.1 publicado ainda usa o diálogo anterior.
-- Conexão da conta, cadastro e atualização dos certificados.
-- Seleção do certificado e autenticação no Firefox. O acesso ao GERID/INSS já foi confirmado em uso real.
-- Pedidos de autorização ao fechar e reabrir abas no mesmo processo do Firefox. O recurso de sessão de até dez minutos ainda precisa de validação no fluxo real; o serviço pode exigir nova autorização antes desse prazo.
-
-Assinatura de PDF e compatibilidade com outros navegadores e portais ainda não estão validadas. Senha e código temporário não são armazenados no cache; somente o token de sessão permanece temporariamente em memória.
-
-## Relatar um resultado
-
-Informe a versão do Fedora, a versão e a forma de instalação do Firefox, o serviço acessado, a etapa em que ocorreu o problema e a mensagem exibida. Para capturas de tela, oculte dados pessoais. Senhas, códigos temporários, arquivos de identidade e tokens devem permanecer com você.
-
-O projeto é independente e não é um produto oficial da Certisign. Para detalhes técnicos, consulte o [guia de desenvolvimento](DEVELOPMENT.md).
-
-Na alpha.2, o aplicativo não executa Python ou Zenity. A alpha.1 publicada ainda usa ambos. No Fedora 44, GTK depende de GStreamer, cujo pacote exige Python para ferramentas próprias; o gerenciador pode instalar esse interpretador indiretamente. Isso é uma dependência do toolkit do sistema, e não uma rotina Python da alpha.2. Não desativar nem remover o Python do sistema na máquina do usuário; a indisponibilidade do interpretador é testada somente em contêiner descartável.
+O projeto é independente e não é um produto oficial da Certisign. Detalhes técnicos estão no [guia de desenvolvimento](DEVELOPMENT.md).

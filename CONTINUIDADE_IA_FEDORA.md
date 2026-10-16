@@ -1,6 +1,6 @@
 # Continuidade do Axia RemotedID
 
-**Retomada atual — 15/10/2026:** os seis pontos da revisão de navegadores estão implementados. O ponto 5 foi commitado em `b023562`; o ponto 6 foi concluído sobre essa revisão e aguarda commit pelo usuário. O próximo passo é a validação manual no Fedora/GNOME. Critérios e fluxo de commits em [CONTINUAR_CORRECOES_NAVEGADORES.md](docs/CONTINUAR_CORRECOES_NAVEGADORES.md). Leia esse plano antes das próximas etapas históricas abaixo.
+**Retomada atual — 15/10/2026:** os seis pontos da revisão de navegadores estão implementados e commitados, incluindo o ponto 6 em `cbdef29`. O usuário solicitou retirar a instalação antiga e publicar a alpha.2 para baixar e configurar manualmente do zero. README e guia de instalação apontam para `v0.1.0-alpha.2`; confira essa release no GitHub antes de retomar. O próximo passo é a validação manual no Fedora/GNOME. Critérios em [CONTINUAR_CORRECOES_NAVEGADORES.md](docs/CONTINUAR_CORRECOES_NAVEGADORES.md). Leia esse plano antes das próximas etapas históricas abaixo.
 
 Estado atualizado em 15/10/2026, após concluir o ponto 6. Leia este arquivo, o [README](README.md), a [referência do protocolo](docs/PROTOCOL.md) e o código atual antes de propor alterações. Este documento substitui o antigo diário de investigação.
 
@@ -8,7 +8,15 @@ Estado atualizado em 15/10/2026, após concluir o ponto 6. Leia este arquivo, o 
 
 O painel mostra o último resultado por navegador/perfil durante a sessão da janela, separado do estado da conta. Distingue configuração concluída, ação necessária e falha; conserva os sucessos dos demais alvos, atualiza o perfil correto na repetição e não apresenta restauração suspensa como concluída. Cancelamento e ausência de alvos preservam os resultados anteriores. A instrução de reabrir navegadores exige sucesso em pelo menos um alvo da tentativa. O lote CLI `setup-browsers --yes` agora retorna relatório JSON versionado e tenta todos os alvos, com código de falha para resultados parciais; `--list` e `setup-firefox --yes` mantêm os contratos anteriores. Detalhes em [FIX_06_BROWSER_RESULTS.md](docs/FIX_06_BROWSER_RESULTS.md).
 
-Validação: 140 testes Rust comuns, GTK em display privado, 21 verificações CLI, NSS real com lotes de falha total/sucesso parcial/recuperação/repetição idempotente, formatação, Clippy, builds debug/release e publicação. Logs ignorados `test-results/fix06-*`. Não houve alteração da instalação real, acesso à conta ou release. O ponto 6 aguarda commit pelo usuário; a validação manual das seis correções no Fedora/GNOME continua pendente. O RPM público continua sendo a alpha.1.
+Validação da entrega do ponto 6: 140 testes Rust comuns, GTK em display privado, 21 verificações CLI, NSS real com lotes de falha total/sucesso parcial/recuperação/repetição idempotente, formatação, Clippy, builds debug/release e publicação. Logs ignorados `test-results/fix06-*`. Naquela entrega não houve alteração da instalação real, acesso à conta ou release. O usuário posteriormente commitou o ponto 6 e autorizou a publicação da alpha.2. A validação manual das seis correções no Fedora/GNOME continua pendente.
+
+## Preparação da instalação limpa e release alpha.2
+
+A instalação antiga era por usuário, sem RPM instalado. Após o usuário fechar o Firefox, o residente antigo foi encerrado e o módulo Axia removido pela API NSS sob a trava `fcntl` do perfil. As bases `cert9.db` e `key4.db` permaneceram idênticas byte a byte. Binários, atalho, alias, inicialização automática, identidade, carteira, preferências e backups antigos foram arquivados privadamente fora do repositório. Não publicar nem empacotar essa cópia. O cadastro remoto anterior não foi revogado, e nenhuma autenticação ou assinatura real foi executada.
+
+O novo pacote é destinado à instalação manual pelo usuário depois do download, sem instalação automática na máquina de trabalho. O guia público foi refeito para o RPM e o pacote nativos da alpha.2. A lista de documentos empacotados também inclui o plano de continuidade, preservando os links dos documentos das correções. Logs desta preparação usam `test-results/alpha2-*` e são ignorados.
+
+Validação da preparação: 140 testes Rust, formatação/Clippy, 21 verificações do executável release, 14 verificações PKCS#11/OpenSC, NSS real e bandeja passaram. O RPM foi instalado, reinstalado e removido em Fedora 44 descartável sem rede, verificando o runtime nativo, migração NSS, backup, idempotência e preservação dos dados sintéticos. As dependências diretas do RPM não incluem Python, Zenity ou navegador. Os pacotes incluem checksum SHA-256 e não contêm estado de conta. Esses testes não substituem a instalação manual nem a homologação real com Certisign.
 
 ## Correção 5 — descoberta de navegadores nativos
 

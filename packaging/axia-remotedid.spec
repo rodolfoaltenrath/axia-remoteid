@@ -57,6 +57,9 @@ desktop-file-validate %{buildroot}%{_datadir}/applications/axia-remotedid.deskto
 %{_datadir}/applications/axia-remotedid.desktop
 
 %changelog
+* Thu Oct 15 2026 Axia RemotedID contributors - 0.1.0-0.2.alpha2
+- Publish native alpha.2 with runtime guards and account recovery.
+- Include secondary Firefox profiles, LibreWolf discovery and per-profile results.
 * Wed Oct 14 2026 Axia RemotedID contributors - 0.1.0-0.2.alpha2
 - Compile desktop, browser setup, installation and authorization UI in Rust.
 - Detect installed browsers without a direct Python, Zenity or browser requirement.
