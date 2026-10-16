@@ -184,6 +184,18 @@ pub fn snapshot(root: &Path, names: &[PathBuf]) -> Result<(SourceFiles, Vec<Issu
             .unwrap_or_default()
             .to_string_lossy()
             .to_ascii_lowercase();
+        let lower_name = basename.to_ascii_lowercase();
+        if ["py", "pyc", "pyo"].contains(&extension.as_str())
+            || ["pyproject.toml", "pipfile", "pipfile.lock", "setup.cfg"]
+                .contains(&lower_name.as_str())
+            || lower_name.starts_with("requirements") && extension == "txt"
+        {
+            reject(
+                &mut issues,
+                "Python code or dependency manifest is no longer part of this project",
+            );
+            continue;
+        }
         if FORBIDDEN_SUFFIXES.contains(&extension.as_str())
             || ["wallet.json", "config.json", ".env"].contains(&basename.as_ref())
             || basename.starts_with(".env.")
@@ -240,6 +252,39 @@ pub fn safe_relative(path: &Path) -> bool {
 mod tests {
     use super::*;
     use std::os::unix::fs::symlink;
+
+    #[test]
+    fn publication_rejects_reintroduced_python_code_and_dependency_manifests() -> Result<()> {
+        let root = tempfile::tempdir()?;
+        let names: Vec<PathBuf> = [
+            "old.py",
+            "old.PY",
+            "cache.pyc",
+            "cache.pyo",
+            "requirements-test.txt",
+            "pyproject.toml",
+            "Pipfile",
+            "Pipfile.lock",
+            "setup.cfg",
+        ]
+        .into_iter()
+        .map(PathBuf::from)
+        .collect();
+        for name in &names {
+            fs::write(root.path().join(name), b"synthetic only")?;
+        }
+        let issues = inspect(root.path(), &names)?;
+        assert_eq!(issues.len(), names.len());
+        assert!(
+            issues
+                .iter()
+                .all(|issue| issue.reason.contains("Python code"))
+        );
+        // Historical interoperability data remain data, not executable code.
+        fs::write(root.path().join("python-vector-origin.json"), b"{}")?;
+        assert!(inspect(root.path(), &["python-vector-origin.json".into()])?.is_empty());
+        Ok(())
+    }
 
     #[test]
     fn tracked_ignored_state_cannot_escape_git_guard() -> Result<()> {

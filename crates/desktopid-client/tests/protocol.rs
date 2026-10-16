@@ -193,7 +193,7 @@ fn laboratory_runs_keep_separate_private_artifacts_and_preserve_identity() {
 }
 
 #[test]
-fn python_generated_authentication_vectors_match_byte_for_byte() {
+fn frozen_external_authentication_vectors_match_byte_for_byte() {
     let data = fixture();
     assert_eq!(data["laboratory_only"], true);
     let identity =
@@ -217,7 +217,10 @@ fn unsupported_json_cannot_be_signed() {
     for input in [
         json!({"n": 1.25}),
         json!({"n": 9223372036854775808u64}),
+        json!({"n": -9223372036854775809f64}),
         json!({"a": [1, 2]}),
+        json!({"a": ["text"]}),
+        json!({"a": [true]}),
         json!([{}]),
         json!({"a": [null]}),
     ] {
@@ -226,7 +229,7 @@ fn unsupported_json_cannot_be_signed() {
 }
 
 #[test]
-fn python_prehashed_signatures_verify_and_tampered_or_double_hash_fail() {
+fn frozen_prehashed_signatures_verify_and_tampered_or_double_hash_fail() {
     let data = fixture();
     let cert = X509::from_pem(data["certificate_pem"].as_str().unwrap().as_bytes()).unwrap();
     let key = cert.public_key().unwrap();
@@ -296,6 +299,8 @@ fn signature_response_requires_one_successful_well_formed_result() {
 
 #[test]
 fn response_id_is_metadata_and_does_not_have_to_echo_numeric_zero() {
+    let signature: Vec<u8> = (0..=255).collect();
+    let encoded = STANDARD.encode(&signature);
     for id in [
         json!(0),
         json!(9),
@@ -304,15 +309,15 @@ fn response_id_is_metadata_and_does_not_have_to_echo_numeric_zero() {
         Value::Null,
     ] {
         let response =
-            json!({"status":true,"idArray":[{"status":true,"id":id,"signatureBase64":"YQ=="}]});
-        assert_eq!(protocol::decode_signature(&response).unwrap(), b"a");
+            json!({"status":true,"idArray":[{"status":true,"id":id,"signatureBase64":encoded}]});
+        assert_eq!(protocol::decode_signature(&response).unwrap(), signature);
     }
     assert_eq!(
         protocol::decode_signature(
-            &json!({"status":true,"idArray":[{"status":true,"signatureBase64":"YQ=="}]})
+            &json!({"status":true,"idArray":[{"status":true,"signatureBase64":encoded}]})
         )
         .unwrap(),
-        b"a"
+        signature
     );
 }
 

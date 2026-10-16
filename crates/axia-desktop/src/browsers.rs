@@ -747,10 +747,18 @@ fn setup_with(
     let Some(selected) = choose(&text, &choices) else {
         return Ok(None);
     };
+    if selected.is_empty() {
+        return Ok(None);
+    }
     let selected: Vec<_> = selected
         .into_iter()
-        .map(|index| targets[index].clone())
-        .collect();
+        .map(|index| {
+            targets
+                .get(index)
+                .cloned()
+                .context("Seleção de navegador inválida")
+        })
+        .collect::<Result<_>>()?;
     let results = configure(selected, module, home)?;
     Ok(Some(format!(
         "{}\n\nReabra os navegadores configurados e escolha a entrada com certificado digital no serviço desejado.",
@@ -807,7 +815,7 @@ mod tests {
     }
 
     #[test]
-    fn cancelled_browser_setup_preserves_profile_and_never_registers() {
+    fn cancelled_empty_or_invalid_browser_selection_preserves_profile_and_never_registers() {
         let temporary = tempfile::tempdir().unwrap();
         let home = temporary.path();
         let store = crate::storage::Store::new(home.join("identity")).unwrap();
@@ -834,42 +842,66 @@ mod tests {
         for name in FILES {
             fs::write(profile.join(name), b"preserve laboratory profile").unwrap();
         }
-        let identity = fs::read(store.path().join("identity.pem")).unwrap();
-        let wallet = fs::read(store.path().join("wallet.json")).unwrap();
-        let result = setup_with(
-            &store,
-            Some(profile.clone()),
-            || {
-                Ok((
-                    home.to_owned(),
-                    home.join("unused-module.so"),
-                    Inventory {
-                        installed: vec!["Firefox".into()],
-                        targets: Vec::new(),
-                        notices: Vec::new(),
-                    },
-                ))
-            },
-            |_, choices| {
-                assert_eq!(choices, &["Firefox"]);
-                None
-            },
-            |_, _, _| panic!("cancel must not enter NSS or register a module"),
-        )
-        .unwrap();
-        assert!(result.is_none());
-        for name in FILES {
-            assert_eq!(
-                fs::read(profile.join(name)).unwrap(),
-                b"preserve laboratory profile"
+        let state_before: Vec<_> = fs::read_dir(store.path())
+            .unwrap()
+            .map(|entry| {
+                let path = entry.unwrap().path();
+                let contents = fs::read(&path).unwrap();
+                (path, contents)
+            })
+            .collect();
+        for (selection, invalid) in [
+            (None, false),
+            (Some(vec![]), false),
+            (Some(vec![0, 99]), true),
+            (Some(vec![usize::MAX]), true),
+        ] {
+            let result = setup_with(
+                &store,
+                Some(profile.clone()),
+                || {
+                    Ok((
+                        home.to_owned(),
+                        home.join("unused-module.so"),
+                        Inventory {
+                            installed: vec!["Firefox".into()],
+                            targets: Vec::new(),
+                            notices: Vec::new(),
+                        },
+                    ))
+                },
+                |_, choices| {
+                    assert_eq!(choices, &["Firefox"]);
+                    selection
+                },
+                |_, _, _| panic!("cancelled, empty or invalid selection must not enter NSS"),
             );
+            if invalid {
+                assert!(
+                    result
+                        .unwrap_err()
+                        .to_string()
+                        .contains("Seleção de navegador inválida")
+                );
+            } else {
+                assert!(result.unwrap().is_none());
+            }
+            for name in FILES {
+                assert_eq!(
+                    fs::read(profile.join(name)).unwrap(),
+                    b"preserve laboratory profile"
+                );
+            }
+            assert_eq!(fs::read_dir(&profile).unwrap().count(), FILES.len());
+            assert_eq!(
+                fs::read_dir(store.path()).unwrap().count(),
+                state_before.len()
+            );
+            for (path, contents) in &state_before {
+                assert_eq!(&fs::read(path).unwrap(), contents);
+            }
+            assert!(!home.join(".local/state").exists());
         }
-        assert_eq!(
-            fs::read(store.path().join("identity.pem")).unwrap(),
-            identity
-        );
-        assert_eq!(fs::read(store.path().join("wallet.json")).unwrap(), wallet);
-        assert!(!home.join(".local/state").exists());
     }
 
     #[test]

@@ -2,7 +2,15 @@
 
 **Retomada atual — 15/10/2026:** os pontos 1 a 3 da revisão de navegadores estão concluídos e commitados até `b0667ca`. As pendências 4 a 6, critérios de aceitação, fluxo de commits e instruções para outro computador estão em [CONTINUAR_CORRECOES_NAVEGADORES.md](docs/CONTINUAR_CORRECOES_NAVEGADORES.md). Leia esse plano antes das próximas etapas históricas abaixo. O usuário decidiu fazer o teste manual no Fedora GNOME depois dos seis pontos.
 
-Estado atualizado em 15/10/2026, após concluir a migração dos testes Python para Rust. Leia este arquivo, o [README](README.md), a [referência do protocolo](docs/PROTOCOL.md) e o código atual antes de propor alterações. Este documento substitui o antigo diário de investigação.
+Estado atualizado em 15/10/2026, após conciliar as alterações locais com os quatro commits que estavam no GitHub. Leia este arquivo, o [README](README.md), a [referência do protocolo](docs/PROTOCOL.md) e o código atual antes de propor alterações. Este documento substitui o antigo diário de investigação.
+
+## Conciliação entre as duas máquinas — 15/10/2026
+
+O `main` foi atualizado por fast-forward de `f858254` para `b4dd225`, alinhando o histórico com `origin/main`. As alterações locais anteriores foram guardadas em stash e em backup ignorado pelo Git. A conciliação foi feita sobre a versão remota: preserva integralmente as três correções de runtime, Chromium aberto e recuperação da carteira, além da normalização LF/CRLF do verificador. A remoção dos testes Python já estava no remoto e não foi refeita.
+
+Foram incorporados os acréscimos locais úteis: bloqueio de fontes/bytecode e manifestos Python na publicação; ajuda e versão da CLI sem criação de estado; seleção vazia ou inválida sem registro NSS; preservação de todos os arquivos da conta e do perfil nesses casos; casos adicionais de protocolo e preservação de ações desktop e aliases de terceiros. Verificações equivalentes foram reunidas nos testes existentes. O mapa atualizado está em [TEST_MIGRATION.md](docs/TEST_MIGRATION.md).
+
+Passaram formatação, Clippy com `-D warnings`, 108 testes Rust comuns, GTK em display privado, 18 verificações CLI, 14 PKCS#11/OpenSC, integração Firefox/NSS e bandeja em D-Bus privado. A publicação verificou 87 arquivos sem ocorrências. Logs e relatórios: `test-results/conciliacao-*`, ignorados. As novas alterações continuam sem commit para revisão do usuário; não houve push, instalação na conta real nem publicação de RPM. Os pontos 4 a 6 continuam pendentes, e o próximo é o ponto 4.
 
 ## Migração dos testes para Rust — 15/10/2026
 

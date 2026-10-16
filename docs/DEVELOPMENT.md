@@ -32,6 +32,8 @@ A CI executa a suíte Cargo e as integrações compiladas no job Fedora. Não h�
 
 O fixture histórico `python-vectors.json` permanece como dados públicos imutáveis gerados pela implementação independente anterior; não executa Python. A nova regressão RSA calcula `s^e mod n` e confere os bytes EMSA-PKCS1-v1_5/SHA-256, sem depender do verificador de produção. O bloqueio Firefox é exercitado por um processo separado com `fcntl`, em vez de simular um bloqueio no mesmo processo. Cancelamento substitui apenas a fronteira gráfica e verifica que o fluxo de configuração não chama o registro nem altera o perfil. Os testes NSS e RPM usam as bibliotecas/CLI reais em estado sintético.
 
+O [mapa detalhado da migração](TEST_MIGRATION.md) relaciona os 26 cenários anteriores aos testes atuais. Seleções vazias são tratadas como cancelamento; índices inválidos são recusados antes de iniciar o registro NSS. Os testes verificam a preservação do estado local e dos perfis nesses casos.
+
 O instalador grava a biblioteca em `~/.local/lib/desktopid-linux/libdesktopid_pkcs11.so` e o auxiliar em `~/.local/libexec/desktopid-linux/desktopid-client`. Não registra automaticamente o módulo no navegador ou em p11-kit. A configuração dos navegadores é uma ação posterior do usuário, pelo painel nativo.
 
 ### Executável local para teste no Fedora
@@ -182,6 +184,8 @@ cargo xtask generate-vectors --output dist/laboratory-vectors.json
 Esses comandos substituem `check_publication.py`, `package_sources.py`, `package_linux.py`, `package_rpm.py`, `fedora_diagnostic.py` e `generate_rust_vectors.py`. O empacotamento RPM ainda usa `rpmbuild` no host ou Podman com as ferramentas de construção do Fedora; são dependências do desenvolvedor, não executáveis adicionados ao aplicativo. ZIP e tar.gz são escritos por bibliotecas Rust, com metadados fixos, e recebem checksum SHA-256. Os pacotes de execução incluem uma lista explícita de arquivos, sem estados de contas ou testes Python. O ZIP de fontes conserva os testes e usa os candidatos selecionados pelo Git, verificando os mesmos bytes que serão arquivados.
 
 O gerador exige uma saída nova e não altera o fixture histórico `python-vectors.json`, sua exceção de publicação ou sua chave pública de laboratório. Novos dados usam SHA-256/384/512; SHA-1 permanece somente no fixture histórico, respeitando a política criptográfica do Fedora. O teste compara os valores concatenados com o fixture anterior e verifica as assinaturas offline. Os testes do verificador de publicação também passaram para Rust, incluindo arquivos privados rastreados que o `.gitignore` não consegue excluir.
+
+O verificador também recusa fontes Python, bytecode e manifestos de dependências Python. A exceção restrita ao fixture histórico permanece com o mesmo hash, aceitando seu conteúdo em LF ou CRLF; não libera cópias ou alterações desse fixture.
 
 Os nove scripts restantes de inventário, assinatura e testes de integração também foram substituídos. Não há arquivos Python em `scripts/`. O auxiliar sintético de assinatura é uma cópia do ELF de desenvolvimento, ativada somente no home privado de laboratório; ele usa a chave privada sintética publicada deliberadamente no fixture, nunca credenciais ou chaves de conta. Os testes rodam em processos com HOME/XDG/estado próprios, sem alterar o ambiente do processo principal.
 

@@ -37,12 +37,17 @@ pub fn smoke(root: &Path, binary: &Path, report: &Path) -> Result<()> {
         "--access-url",
         "laboratory",
     ];
-    let version = run(&missing, &["--version"], true)?;
-    ensure!(
-        !version.stdout.is_empty() && version.stderr.is_empty() && !missing.exists(),
-        "CLI --version iniciou configuração gráfica ou criou estado"
-    );
-    checks.push("cli-version-without-display-browser-setup-or-account-state");
+    for command in ["--version", "--help"] {
+        let output = run(&missing, &[command], true)?;
+        ensure!(
+            !output.stdout.is_empty()
+                && output.stderr.is_empty()
+                && !missing.exists()
+                && !home.join(".config").exists(),
+            "CLI {command} iniciou configuração gráfica ou criou estado"
+        );
+    }
+    checks.push("cli-version-and-help-without-ui-browser-setup-or-account-state");
     run(&state, &init, true)?;
     let original = fs::read(state.join("identity.pem"))?;
     ensure!(
@@ -76,9 +81,9 @@ pub fn smoke(root: &Path, binary: &Path, report: &Path) -> Result<()> {
     let signature = home.join("signature.bin");
     lab::private_write(&document, &document_bytes)?;
     for (algorithm, check) in [
-        ("sha256", "sha256-python-signature-and-tamper-rejection"),
-        ("sha384", "sha384-python-signature-and-tamper-rejection"),
-        ("sha512", "sha512-python-signature-and-tamper-rejection"),
+        ("sha256", "sha256-frozen-signature-and-tamper-rejection"),
+        ("sha384", "sha384-frozen-signature-and-tamper-rejection"),
+        ("sha512", "sha512-frozen-signature-and-tamper-rejection"),
     ] {
         lab::private_write(
             &signature,

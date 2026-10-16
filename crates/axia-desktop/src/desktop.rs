@@ -304,7 +304,7 @@ mod tests {
         fs::write(
             &entry,
             format!(
-                "[Desktop Entry]\nName=Axia RemotedID Alpha\nExec=\"{}\" gui\n",
+                "[Desktop Entry]\nName=Axia RemotedID Alpha\nExec=\"{}\" gui\n[Desktop Action Other]\nName=Other\nExec=/usr/bin/true\n",
                 legacy.display()
             ),
         )
@@ -318,16 +318,19 @@ mod tests {
         std::os::unix::fs::symlink(&legacy, &alias).unwrap();
         migrate_shortcuts_to(home, &system).unwrap();
         let hidden = fs::read(&entry).unwrap();
-        assert_eq!(
-            ini(std::str::from_utf8(&hidden).unwrap()).unwrap()["Desktop Entry"]["hidden"],
-            "true"
-        );
+        let sections = ini(std::str::from_utf8(&hidden).unwrap()).unwrap();
+        assert_eq!(sections["Desktop Entry"]["hidden"], "true");
+        assert!(!sections["Desktop Action Other"].contains_key("hidden"));
         assert_eq!(fs::read(&foreign).unwrap(), original_foreign);
         assert_eq!(fs::read_link(&alias).unwrap(), system);
         migrate_shortcuts_to(home, &system).unwrap();
         assert_eq!(fs::read(entry).unwrap(), hidden);
         assert_eq!(fs::read(foreign).unwrap(), original_foreign);
-        assert_eq!(fs::read_link(alias).unwrap(), system);
+        assert_eq!(fs::read_link(&alias).unwrap(), system);
+        fs::remove_file(&alias).unwrap();
+        std::os::unix::fs::symlink("/usr/bin/true", &alias).unwrap();
+        migrate_shortcuts_to(home, &system).unwrap();
+        assert_eq!(fs::read_link(alias).unwrap(), Path::new("/usr/bin/true"));
     }
     #[test]
     fn native_install_preserves_account_and_refuses_foreign_launcher() {
